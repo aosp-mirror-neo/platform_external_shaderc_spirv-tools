@@ -13,6 +13,7 @@
 # limitations under the License.
 
 set(GRAMMAR_PROCESSING_SCRIPT "${spirv-tools_SOURCE_DIR}/utils/generate_grammar_tables.py")
+set(XML_REGISTRY_PROCESSING_SCRIPT "${spirv-tools_SOURCE_DIR}/utils/generate_registry_tables.py")
 
 # macro() definitions are used in the following because we need to append .inc
 # file paths into some global lists (*_CPP_DEPENDS). And those global lists are
@@ -65,6 +66,18 @@ spvtools_core_tables("1.0")
 spvtools_core_tables("1.1")
 spvtools_opencl_tables("1.0")
 spvtools_glsl_tables("1.0")
+
+
+# Extract the list of known generators from the SPIR-V XML registry file.
+set(GENERATOR_INC_FILE ${spirv-tools_BINARY_DIR}/generators.inc)
+set(SPIRV_XML_REGISTRY_FILE ${SPIRV_HEADER_INCLUDE_DIR}/spirv/spir-v.xml)
+add_custom_command(OUTPUT ${GENERATOR_INC_FILE}
+  COMMAND ${PYTHON_EXECUTABLE} ${XML_REGISTRY_PROCESSING_SCRIPT}
+    --xml=${SPIRV_XML_REGISTRY_FILE}
+    --generator-output=${GENERATOR_INC_FILE}
+  DEPENDS ${XML_REGISTRY_PROCESSING_SCRIPT} ${SPIRV_XML_REGISTRY_FILE}
+  COMMENT "Generate tables based on the SPIR-V XML registry.")
+list(APPEND OPCODE_CPP_DEPENDS ${GENERATOR_INC_FILE})
 
 # The following .cpp files include the above generated .inc files.
 # Add those .inc files as their dependencies.
@@ -126,6 +139,7 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/name_mapper.h
   ${CMAKE_CURRENT_SOURCE_DIR}/opcode.h
   ${CMAKE_CURRENT_SOURCE_DIR}/operand.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.h
   ${CMAKE_CURRENT_SOURCE_DIR}/print.h
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_constant.h
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_definition.h
@@ -142,12 +156,12 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/diagnostic.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/disassemble.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/ext_inst.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/instruction.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/libspirv.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/message.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/name_mapper.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opcode.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/operand.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/print.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/software_version.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_endian.cpp
@@ -159,12 +173,13 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_cfg.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_id.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_instruction.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/validate_datarules.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_layout.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/val/BasicBlock.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/val/Construct.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/val/Function.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/val/Instruction.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/val/ValidationState.cpp)
+  ${CMAKE_CURRENT_SOURCE_DIR}/val/basic_block.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/val/construct.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/val/function.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/val/instruction.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/val/validation_state.cpp)
 
 # The software_version.cpp file includes build-version.inc.
 # Rebuild the software_version.cpp object file if it is older than

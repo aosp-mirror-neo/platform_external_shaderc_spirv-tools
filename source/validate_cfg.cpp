@@ -26,10 +26,10 @@
 #include <utility>
 #include <vector>
 
-#include "val/BasicBlock.h"
-#include "val/Construct.h"
-#include "val/Function.h"
-#include "val/ValidationState.h"
+#include "val/basic_block.h"
+#include "val/construct.h"
+#include "val/function.h"
+#include "val/validation_state.h"
 
 using std::find;
 using std::function;
@@ -198,7 +198,7 @@ void printDominatorList(const BasicBlock& b) {
 spv_result_t FirstBlockAssert(ValidationState_t& _, uint32_t target) {
   if (_.current_function().IsFirstBlock(target)) {
     return _.diag(SPV_ERROR_INVALID_CFG)
-           << "First block " << _.getIdName(target) << " of funciton "
+           << "First block " << _.getIdName(target) << " of function "
            << _.getIdName(_.current_function().id()) << " is targeted by block "
            << _.getIdName(_.current_function().current_block()->id());
   }

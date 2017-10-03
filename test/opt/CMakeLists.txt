@@ -63,6 +63,11 @@ add_spvtools_unittest(TARGET pass_inline
   LIBS SPIRV-Tools-opt
 )
 
+add_spvtools_unittest(TARGET pass_inline_opaque
+  SRCS inline_opaque_test.cpp pass_utils.cpp
+  LIBS SPIRV-Tools-opt
+)
+
 add_spvtools_unittest(TARGET pass_insert_extract_elim
   SRCS insert_extract_elim_test.cpp pass_utils.cpp
   LIBS SPIRV-Tools-opt
@@ -95,6 +100,11 @@ add_spvtools_unittest(TARGET pass_dead_branch_elim
 
 add_spvtools_unittest(TARGET pass_aggressive_dce
   SRCS aggressive_dead_code_elim_test.cpp pass_utils.cpp
+  LIBS SPIRV-Tools-opt
+)
+
+add_spvtools_unittest(TARGET pass_common_uniform_elim
+  SRCS common_uniform_elim_test.cpp pass_utils.cpp
   LIBS SPIRV-Tools-opt
 )
 

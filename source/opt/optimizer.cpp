@@ -137,8 +137,14 @@ Optimizer::PassToken CreateBlockMergePass() {
       MakeUnique<opt::BlockMergePass>());
 }
 
-Optimizer::PassToken CreateInlinePass() {
-  return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::InlinePass>());
+Optimizer::PassToken CreateInlineExhaustivePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::InlineExhaustivePass>());
+}
+  
+Optimizer::PassToken CreateInlineOpaquePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::InlineOpaquePass>());
 }
   
 Optimizer::PassToken CreateLocalAccessChainConvertPass() {
@@ -174,6 +180,11 @@ Optimizer::PassToken CreateLocalMultiStoreElimPass() {
 Optimizer::PassToken CreateAggressiveDCEPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::AggressiveDCEPass>());
+}
+
+Optimizer::PassToken CreateCommonUniformElimPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::CommonUniformElimPass>());
 }
 
 Optimizer::PassToken CreateCompactIdsPass() {

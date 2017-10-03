@@ -16,6 +16,7 @@ add_library(SPIRV-Tools-opt
   basic_block.h
   block_merge_pass.h
   build_module.h
+  common_uniform_elim_pass.h
   compact_ids_pass.h
   constants.h
   dead_branch_elim_pass.h
@@ -26,6 +27,8 @@ add_library(SPIRV-Tools-opt
   fold_spec_constant_op_and_composite_pass.h
   freeze_spec_constant_value_pass.h
   inline_pass.h
+  inline_exhaustive_pass.h
+  inline_opaque_pass.h
   insert_extract_elim.h
   instruction.h
   ir_loader.h
@@ -37,6 +40,7 @@ add_library(SPIRV-Tools-opt
   module.h
   null_pass.h
   reflect.h
+  mem_pass.h
   pass.h
   passes.h
   pass_manager.h
@@ -50,6 +54,7 @@ add_library(SPIRV-Tools-opt
   basic_block.cpp
   block_merge_pass.cpp
   build_module.cpp
+  common_uniform_elim_pass.cpp
   compact_ids_pass.cpp
   def_use_manager.cpp
   dead_branch_elim_pass.cpp
@@ -59,6 +64,8 @@ add_library(SPIRV-Tools-opt
   fold_spec_constant_op_and_composite_pass.cpp
   freeze_spec_constant_value_pass.cpp
   inline_pass.cpp
+  inline_exhaustive_pass.cpp
+  inline_opaque_pass.cpp
   insert_extract_elim.cpp
   instruction.cpp
   ir_loader.cpp
@@ -69,6 +76,8 @@ add_library(SPIRV-Tools-opt
   module.cpp
   set_spec_constant_default_value_pass.cpp
   optimizer.cpp
+  mem_pass.cpp
+  pass.cpp
   pass_manager.cpp
   strip_debug_info_pass.cpp
   types.cpp

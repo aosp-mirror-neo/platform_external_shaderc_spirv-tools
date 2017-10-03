@@ -24,51 +24,21 @@ namespace opt {
 
 namespace {
 
-const uint32_t kEntryPointFunctionIdInIdx = 1;
-const uint32_t kStorePtrIdInIdx = 0;
-const uint32_t kLoadPtrIdInIdx = 0;
-const uint32_t kAccessChainPtrIdInIdx = 0;
 const uint32_t kTypePointerStorageClassInIdx = 0;
-const uint32_t kCopyObjectOperandInIdx = 0;
 const uint32_t kExtInstSetIdInIndx = 0;
 const uint32_t kExtInstInstructionInIndx = 1;
 
 }  // namespace anonymous
 
-bool AggressiveDCEPass::IsNonPtrAccessChain(const SpvOp opcode) const {
-  return opcode == SpvOpAccessChain || opcode == SpvOpInBoundsAccessChain;
-}
-
-ir::Instruction* AggressiveDCEPass::GetPtr(
-      ir::Instruction* ip, uint32_t* varId) {
-  const SpvOp op = ip->opcode();
-  assert(op == SpvOpStore || op == SpvOpLoad);
-  *varId = ip->GetSingleWordInOperand(
-      op == SpvOpStore ? kStorePtrIdInIdx : kLoadPtrIdInIdx);
-  ir::Instruction* ptrInst = def_use_mgr_->GetDef(*varId);
-  while (ptrInst->opcode() == SpvOpCopyObject) {
-    *varId = ptrInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
-    ptrInst = def_use_mgr_->GetDef(*varId);
-  }
-  ir::Instruction* varInst = ptrInst;
-  while (varInst->opcode() != SpvOpVariable) {
-    if (IsNonPtrAccessChain(varInst->opcode())) {
-      *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
-    }
-    else {
-      assert(varInst->opcode() == SpvOpCopyObject);
-      *varId = varInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
-    }
-    varInst = def_use_mgr_->GetDef(*varId);
-  }
-  return ptrInst;
-}
-
 bool AggressiveDCEPass::IsLocalVar(uint32_t varId) {
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
-  assert(varInst->opcode() == SpvOpVariable);
+  const SpvOp op = varInst->opcode();
+  if (op != SpvOpVariable && op != SpvOpFunctionParameter) 
+    return false;
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
+  if (varTypeInst->opcode() != SpvOpTypePointer)
+    return false;
   return varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) ==
       SpvStorageClassFunction;
 }
@@ -87,7 +57,7 @@ void AggressiveDCEPass::AddStores(uint32_t ptrId) {
       } break;
       case SpvOpLoad:
         break;
-      // Assume it stores eg frexp, modf
+      // If default, assume it stores eg frexp, modf, function call
       case SpvOpStore:
       default: {
         if (live_insts_.find(u.inst) == live_insts_.end())
@@ -123,11 +93,27 @@ bool AggressiveDCEPass::AllExtensionsSupported() const {
   return true;
 }
 
-void AggressiveDCEPass::KillInstIfTargetDead(ir::Instruction* inst) {
+bool AggressiveDCEPass::KillInstIfTargetDead(ir::Instruction* inst) {
   const uint32_t tId = inst->GetSingleWordInOperand(0);
   const ir::Instruction* tInst = def_use_mgr_->GetDef(tId);
-  if (dead_insts_.find(tInst) != dead_insts_.end())
+  if (dead_insts_.find(tInst) != dead_insts_.end()) {
     def_use_mgr_->KillInst(inst);
+    return true;
+  }
+  return false;
+}
+
+void AggressiveDCEPass::ProcessLoad(uint32_t varId) {
+  // Only process locals
+  if (!IsLocalVar(varId))
+    return;
+  // Return if already processed
+  if (live_local_vars_.find(varId) != live_local_vars_.end()) 
+    return;
+  // Mark all stores to varId as live
+  AddStores(varId);
+  // Cache varId as processed
+  live_local_vars_.insert(varId);
 }
 
 bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
@@ -135,8 +121,6 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   // Add all control flow and instructions with external side effects 
   // to worklist
   // TODO(greg-lunarg): Handle Frexp, Modf more optimally
-  // TODO(greg-lunarg): Handle FunctionCall more optimally
-  // TODO(greg-lunarg): Handle CopyMemory more optimally
   for (auto& blk : *func) {
     for (auto& inst : blk) {
       uint32_t op = inst.opcode();
@@ -154,12 +138,10 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
           if (!IsCombinatorExt(&inst))
             worklist_.push(&inst);
         } break;
-        case SpvOpCopyMemory:
-        case SpvOpFunctionCall: {
-          return false;
-        } break;
         default: {
-          // eg. control flow, function call, atomics
+          // eg. control flow, function call, atomics, function param,
+          // function return
+          // TODO(greg-lunarg): function calls live only if write to non-local
           if (!IsCombinator(op))
             worklist_.push(&inst);
         } break;
@@ -187,12 +169,21 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     if (liveInst->opcode() == SpvOpLoad) {
       uint32_t varId;
       (void) GetPtr(liveInst, &varId);
-      if (IsLocalVar(varId)) {
-        if (live_local_vars_.find(varId) == live_local_vars_.end()) {
-          AddStores(varId);
-          live_local_vars_.insert(varId);
-        }
-      }
+      ProcessLoad(varId);
+    }
+    // If function call, treat as if it loads from all pointer arguments
+    else if (liveInst->opcode() == SpvOpFunctionCall) {
+      liveInst->ForEachInId([this](const uint32_t* iid) {
+        // Skip non-ptr args
+        if (!IsPtr(*iid)) return;
+        uint32_t varId;
+        (void) GetPtr(*iid, &varId);
+        ProcessLoad(varId);
+      });
+    }
+    // If function parameter, treat as if it's result id is loaded from
+    else if (liveInst->opcode() == SpvOpFunctionParameter) {
+      ProcessLoad(liveInst->result_id());
     }
     worklist_.pop();
   }
@@ -210,14 +201,14 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   for (auto& di : module_->debugs()) {
     if (di.opcode() != SpvOpName)
       continue;
-    KillInstIfTargetDead(&di);
-    modified = true;
+    if (KillInstIfTargetDead(&di))
+      modified = true;
   }
   for (auto& ai : module_->annotations()) {
     if (ai.opcode() != SpvOpDecorate && ai.opcode() != SpvOpDecorateId)
       continue;
-    KillInstIfTargetDead(&ai);
-    modified = true;
+    if (KillInstIfTargetDead(&ai))
+      modified = true;
   }
   // Kill dead instructions
   for (auto& blk : *func) {
@@ -233,11 +224,6 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
 
 void AggressiveDCEPass::Initialize(ir::Module* module) {
   module_ = module;
-
-  // Initialize id-to-function map
-  id2function_.clear();
-  for (auto& fn : *module_)
-    id2function_[fn.result_id()] = &fn;
 
   // Clear collections
   worklist_ = std::queue<ir::Instruction*>{};
@@ -270,17 +256,14 @@ Pass::Status AggressiveDCEPass::ProcessImpl() {
   // Initialize combinator whitelists
   InitCombinatorSets();
   // Process all entry point functions
-  bool modified = false;
-  for (auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];
-    modified = AggressiveDCE(fn) || modified;
-  }
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    return AggressiveDCE(fp);
+  };
+  bool modified = ProcessEntryPointCallTree(pfn, module_);
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-AggressiveDCEPass::AggressiveDCEPass()
-    : module_(nullptr), def_use_mgr_(nullptr) {}
+AggressiveDCEPass::AggressiveDCEPass() {}
 
 Pass::Status AggressiveDCEPass::Process(ir::Module* module) {
   Initialize(module);

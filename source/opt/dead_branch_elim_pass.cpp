@@ -24,7 +24,6 @@ namespace opt {
 
 namespace {
 
-const uint32_t kEntryPointFunctionIdInIdx = 1;
 const uint32_t kBranchCondConditionalIdInIdx = 0;
 const uint32_t kBranchCondTrueLabIdInIdx = 1;
 const uint32_t kBranchCondFalseLabIdInIdx = 2;
@@ -147,31 +146,6 @@ void DeadBranchElimPass::AddBranchConditional(uint32_t condId,
   bp->AddInstruction(std::move(newBranchCond));
 }
 
-void DeadBranchElimPass::KillNamesAndDecorates(uint32_t id) {
-  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
-  // kill if no other operands.
-  if (named_or_decorated_ids_.find(id) == named_or_decorated_ids_.end())
-    return;
-  analysis::UseList* uses = def_use_mgr_->GetUses(id);
-  if (uses == nullptr)
-    return;
-  std::list<ir::Instruction*> killList;
-  for (auto u : *uses) {
-    const SpvOp op = u.inst->opcode();
-    if (op == SpvOpName || IsDecorate(op))
-      killList.push_back(u.inst);
-  }
-  for (auto kip : killList)
-    def_use_mgr_->KillInst(kip);
-}
-
-void DeadBranchElimPass::KillNamesAndDecorates(ir::Instruction* inst) {
-  const uint32_t rId = inst->result_id();
-  if (rId == 0)
-    return;
-  KillNamesAndDecorates(rId);
-}
-
 void DeadBranchElimPass::KillAllInsts(ir::BasicBlock* bp) {
   bp->ForEachInst([this](ir::Instruction* ip) {
     KillNamesAndDecorates(ip);
@@ -243,15 +217,29 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     def_use_mgr_->KillInst(br);
     def_use_mgr_->KillInst(mergeInst);
 
+    // Initialize live block set to the live label
+    std::unordered_set<uint32_t> liveLabIds;
+    liveLabIds.insert(liveLabId);
+
     // Iterate to merge block adding dead blocks to elimination set
     auto dbi = bi;
     ++dbi;
     uint32_t dLabId = (*dbi)->id();
     while (dLabId != mergeLabId) {
-      if (!HasNonPhiRef(dLabId)) {
+      if (liveLabIds.find(dLabId) == liveLabIds.end()) {
         // Kill use/def for all instructions and mark block for elimination
         KillAllInsts(*dbi);
         elimBlocks.insert(*dbi);
+      }
+      else {
+        // Mark all successors as live
+        (*dbi)->ForEachSuccessorLabel([&liveLabIds](const uint32_t succId){
+          liveLabIds.insert(succId);
+        });
+        // Mark merge and continue blocks as live
+        (*dbi)->ForMergeAndContinueLabel([&liveLabIds](const uint32_t succId){
+          liveLabIds.insert(succId);
+        });
       }
       ++dbi;
       dLabId = (*dbi)->id();
@@ -313,16 +301,13 @@ void DeadBranchElimPass::Initialize(ir::Module* module) {
   module_ = module;
 
   // Initialize function and block maps
-  id2function_.clear();
   id2block_.clear();
   block2structured_succs_.clear();
-  for (auto& fn : *module_) {
-    // Initialize function and block maps.
-    id2function_[fn.result_id()] = &fn;
-    for (auto& blk : fn) {
+
+  // Initialize block map
+  for (auto& fn : *module_)
+    for (auto& blk : fn)
       id2block_[blk.id()] = &blk;
-    }
-  }
 
   // TODO(greg-lunarg): Reuse def/use from previous passes
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
@@ -330,15 +315,6 @@ void DeadBranchElimPass::Initialize(ir::Module* module) {
   // Initialize extension whitelist
   InitExtensions();
 };
-
-void DeadBranchElimPass::FindNamedOrDecoratedIds() {
-  for (auto& di : module_->debugs())
-    if (di.opcode() == SpvOpName)
-      named_or_decorated_ids_.insert(di.GetSingleWordInOperand(0));
-  for (auto& ai : module_->annotations())
-    if (ai.opcode() == SpvOpDecorate || ai.opcode() == SpvOpDecorateId)
-      named_or_decorated_ids_.insert(ai.GetSingleWordInOperand(0));
-}
 
 bool DeadBranchElimPass::AllExtensionsSupported() const {
   // If any extension not in whitelist, return false
@@ -368,17 +344,14 @@ Pass::Status DeadBranchElimPass::ProcessImpl() {
   // Collect all named and decorated ids
   FindNamedOrDecoratedIds();
   // Process all entry point functions
-  bool modified = false;
-  for (const auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];
-    modified = EliminateDeadBranches(fn) || modified;
-  }
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    return EliminateDeadBranches(fp);
+  };
+  bool modified = ProcessEntryPointCallTree(pfn, module_);
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-DeadBranchElimPass::DeadBranchElimPass()
-    : module_(nullptr), def_use_mgr_(nullptr) {}
+DeadBranchElimPass::DeadBranchElimPass() {}
 
 Pass::Status DeadBranchElimPass::Process(ir::Module* module) {
   Initialize(module);

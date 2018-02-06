@@ -26,6 +26,7 @@
 
 #include "basic_block.h"
 #include "def_use_manager.h"
+#include "ir_context.h"
 #include "module.h"
 #include "pass.h"
 
@@ -37,15 +38,9 @@ class BlockMergePass : public Pass {
  public:
   BlockMergePass();
   const char* name() const override { return "merge-blocks"; }
-  Status Process(ir::Module*) override;
+  Status Process(ir::IRContext*) override;
 
  private:
-  // Return true if |block_ptr| is loop header block
-  bool IsLoopHeader(ir::BasicBlock* block_ptr);
-
-  // Return true if |labId| has multiple refs. Do not count OpName.
-  bool HasMultipleRefs(uint32_t labId);
-
   // Kill any OpName instruction referencing |inst|, then kill |inst|.
   void KillInstAndName(ir::Instruction* inst);
 
@@ -59,14 +54,17 @@ class BlockMergePass : public Pass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::Module* module);
+  // Returns true if |block| (or |id|) contains a merge instruction.
+  bool IsHeader(ir::BasicBlock* block);
+  bool IsHeader(uint32_t id);
+
+  // Returns true if |block| (or |id|) is the merge target of a merge
+  // instruction.
+  bool IsMerge(ir::BasicBlock* block);
+  bool IsMerge(uint32_t id);
+
+  void Initialize(ir::IRContext* c);
   Pass::Status ProcessImpl();
-
-  // Module this pass is processing
-  ir::Module* module_;
-
-  // Def-Uses for the module we are processing
-  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 
   // Extensions supported by this pass.
   std::unordered_set<std::string> extensions_whitelist_;
@@ -76,4 +74,3 @@ class BlockMergePass : public Pass {
 }  // namespace spvtools
 
 #endif  // LIBSPIRV_OPT_BLOCK_MERGE_PASS_H_
-

@@ -15,8 +15,8 @@
 #ifndef SPIRV_TOOLS_DEAD_VARIABLE_ELIMINATION_H
 #define SPIRV_TOOLS_DEAD_VARIABLE_ELIMINATION_H
 
-#include <unordered_map>
 #include <climits>
+#include <unordered_map>
 
 #include "decoration_manager.h"
 #include "mem_pass.h"
@@ -27,7 +27,11 @@ namespace opt {
 class DeadVariableElimination : public MemPass {
  public:
   const char* name() const override { return "dead-variable-elimination"; }
-  Status Process(ir::Module*) override;
+  Status Process(ir::IRContext* c) override;
+
+  ir::IRContext::Analysis GetPreservedAnalyses() override {
+    return ir::IRContext::kAnalysisDefUse;
+  }
 
  private:
   // Deletes the OpVariable instruction who result id is |result_id|.

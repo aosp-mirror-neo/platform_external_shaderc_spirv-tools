@@ -48,6 +48,7 @@ else()
   message(FATAL_ERROR "Your platform '${CMAKE_SYSTEM_NAME}' is not supported!")
 endif()
 
+
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
   message(STATUS "No build type selected, default to Debug")
   set(CMAKE_BUILD_TYPE "Debug")
@@ -84,7 +85,7 @@ if(${COMPILER_IS_LIKE_GNU})
     set(SPIRV_WARNINGS ${SPIRV_WARNINGS} -Werror)
   endif()
 elseif(MSVC)
-  set(SPIRV_WARNINGS -D_CRT_SECURE_NO_WARNINGS /wd4800)
+  set(SPIRV_WARNINGS -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS /wd4800)
 
   if(${SPIRV_WERROR})
     set(SPIRV_WARNINGS ${SPIRV_WARNINGS} /WX)
@@ -162,6 +163,17 @@ endif()
 
 find_host_package(PythonInterp)
 
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+  macro(spvtools_check_symbol_exports TARGET)
+    add_test(NAME spirv-tools-symbol-exports-${TARGET}
+             COMMAND ${PYTHON_EXECUTABLE}
+             ${spirv-tools_SOURCE_DIR}/utils/check_symbol_exports.py "$<TARGET_FILE:${TARGET}>")
+  endmacro()
+else()
+  macro(spvtools_check_symbol_exports TARGET)
+    message("Skipping symbol exports test for ${TARGET}")
+  endmacro()
+endif()
 
 # Defaults to OFF if the user didn't set it.
 option(SPIRV_SKIP_EXECUTABLES
@@ -173,7 +185,18 @@ if ("${SPIRV_SKIP_EXECUTABLES}")
   set(SPIRV_SKIP_TESTS ON)
 endif()
 
+# Defaults to ON.  The checks can be time consuming.
+# Turn off if they take too long.
+option(SPIRV_CHECK_CONTEXT "In a debug build, check if the IR context is in a valid state." ON)
+if (${SPIRV_CHECK_CONTEXT})
+  add_definitions(-DSPIRV_CHECK_CONTEXT)
+endif()
+
 add_subdirectory(external)
+
+if (TARGET effcee)
+  add_definitions(-DSPIRV_EFFCEE)
+endif()
 
 add_subdirectory(source)
 add_subdirectory(tools)
@@ -196,4 +219,29 @@ if (NOT "${SPIRV_SKIP_TESTS}")
   add_test(NAME spirv-tools-copyrights
            COMMAND ${PYTHON_EXECUTABLE} utils/check_copyright.py
            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
- endif()
+endif()
+
+set(SPIRV_LIBRARIES "-lSPIRV-Tools -lSPIRV-Tools-link -lSPIRV-Tools-opt")
+if(SPIRV_BUILD_COMPRESSION)
+  set(SPIRV_LIBRARIES "${SPIRV_LIBRARIES} -lSPIRV-Tools-comp")
+endif(SPIRV_BUILD_COMPRESSION)
+
+# Build pkg-config file
+# Use a first-class target so it's regenerated when relevant files are updated.
+add_custom_target(spirv-tools-pkg-config ALL
+        COMMAND cmake -DCHANGES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/CHANGES
+                      -DTEMPLATE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/SPIRV-Tools.pc.in
+                      -DOUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc
+                      -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+                      -DSPIRV_LIBRARIES=${SPIRV_LIBRARIES}
+                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/write_pkg_config.cmake
+        DEPENDS "CHANGES" "cmake/SPIRV-Tools.pc.in" "cmake/write_pkg_config.cmake")
+
+# Install pkg-config file
+if (ENABLE_SPIRV_TOOLS_INSTALL)
+  install(
+    FILES
+      ${CMAKE_CURRENT_BINARY_DIR}/SPIRV-Tools.pc
+    DESTINATION
+      ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+endif()

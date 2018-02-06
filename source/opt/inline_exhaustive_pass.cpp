@@ -31,13 +31,23 @@ bool InlineExhaustivePass::InlineExhaustive(ir::Function* func) {
         GenInlineCode(&newBlocks, &newVars, ii, bi);
         // If call block is replaced with more than one block, point
         // succeeding phis at new last block.
-        if (newBlocks.size() > 1)
-          UpdateSucceedingPhis(newBlocks);
+        if (newBlocks.size() > 1) UpdateSucceedingPhis(newBlocks);
         // Replace old calling block with new block(s).
+
+        // We need to kill the name and decorations for the call, which
+        // will be deleted.  Other instructions in the block will be moved to
+        // newBlocks.  We don't need to do anything with those.
+        context()->KillNamesAndDecorates(&*ii);
+
         bi = bi.Erase();
+
+        for (auto& bb : newBlocks) {
+          bb->SetParent(func);
+        }
         bi = bi.InsertBefore(&newBlocks);
         // Insert new function variables.
-        if (newVars.size() > 0) func->begin()->begin().InsertBefore(std::move(newVars));
+        if (newVars.size() > 0)
+          func->begin()->begin().InsertBefore(std::move(newVars));
         // Restart inlining at beginning of calling block.
         ii = bi->begin();
         modified = true;
@@ -49,8 +59,8 @@ bool InlineExhaustivePass::InlineExhaustive(ir::Function* func) {
   return modified;
 }
 
-void InlineExhaustivePass::Initialize(ir::Module* module) {
-  InitializeInline(module);
+void InlineExhaustivePass::Initialize(ir::IRContext* c) {
+  InitializeInline(c);
 };
 
 Pass::Status InlineExhaustivePass::ProcessImpl() {
@@ -58,15 +68,14 @@ Pass::Status InlineExhaustivePass::ProcessImpl() {
   ProcessFunction pfn = [this](ir::Function* fp) {
     return InlineExhaustive(fp);
   };
-  bool modified = ProcessEntryPointCallTree(pfn, module_);
-  FinalizeNextId(module_);
+  bool modified = ProcessEntryPointCallTree(pfn, get_module());
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
 InlineExhaustivePass::InlineExhaustivePass() {}
 
-Pass::Status InlineExhaustivePass::Process(ir::Module* module) {
-  Initialize(module);
+Pass::Status InlineExhaustivePass::Process(ir::IRContext* c) {
+  Initialize(c);
   return ProcessImpl();
 }
 

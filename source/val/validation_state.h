@@ -26,8 +26,8 @@
 #include "decoration.h"
 #include "diagnostic.h"
 #include "enum_set.h"
+#include "latest_version_spirv_header.h"
 #include "spirv-tools/libspirv.h"
-#include "spirv/1.2/spirv.h"
 #include "spirv_definition.h"
 #include "val/function.h"
 #include "val/instruction.h"
@@ -69,6 +69,9 @@ class ValidationState_t {
     // Allow functionalities enabled by VariablePointersStorageBuffer
     // capability.
     bool variable_pointers_storage_buffer = false;
+
+    // Permit group oerations Reduce, InclusiveScan, ExclusiveScan
+    bool group_ops_reduce_and_scans = false;
   };
 
   ValidationState_t(const spv_const_context context,
@@ -140,6 +143,9 @@ class ValidationState_t {
   Function& current_function();
   const Function& current_function() const;
 
+  /// Returns function state with the given id, or nullptr if no such function.
+  const Function* function(uint32_t id) const;
+
   /// Returns true if the called after a function instruction but before the
   /// function end instruction
   bool in_function_body() const;
@@ -173,6 +179,7 @@ class ValidationState_t {
   /// Inserts an <id> to the set of functions that are target of OpFunctionCall.
   void AddFunctionCallTarget(const uint32_t id) {
     function_call_targets_.insert(id);
+    current_function().AddFunctionCallTarget(id);
   }
 
   /// Returns whether or not a function<id> is the target of OpFunctionCall.
@@ -259,6 +266,9 @@ class ValidationState_t {
   /// returns the empty vector.
   std::vector<Decoration>& id_decorations(uint32_t id) {
     return id_decorations_[id];
+  }
+  const std::vector<Decoration>& id_decorations(uint32_t id) const {
+    return id_decorations_.at(id);
   }
 
   /// Finds id's def, if it exists.  If found, returns the definition otherwise
@@ -355,33 +365,43 @@ class ValidationState_t {
 
   // Provides detailed information on matrix type.
   // Returns false iff |id| is not matrix type.
-  bool GetMatrixTypeInfo(
-      uint32_t id, uint32_t* num_rows, uint32_t* num_cols,
-      uint32_t* column_type, uint32_t* component_type) const;
+  bool GetMatrixTypeInfo(uint32_t id, uint32_t* num_rows, uint32_t* num_cols,
+                         uint32_t* column_type, uint32_t* component_type) const;
 
   // Collects struct member types into |member_types|.
   // Returns false iff not struct type or has no members.
   // Deletes prior contents of |member_types|.
-  bool GetStructMemberTypes(
-      uint32_t struct_type_id, std::vector<uint32_t>* member_types) const;
+  bool GetStructMemberTypes(uint32_t struct_type_id,
+                            std::vector<uint32_t>* member_types) const;
 
   // Returns true iff |id| is a type corresponding to the name of the function.
   // Only works for types not for objects.
   bool IsFloatScalarType(uint32_t id) const;
   bool IsFloatVectorType(uint32_t id) const;
+  bool IsFloatScalarOrVectorType(uint32_t id) const;
   bool IsFloatMatrixType(uint32_t id) const;
   bool IsIntScalarType(uint32_t id) const;
   bool IsIntVectorType(uint32_t id) const;
+  bool IsIntScalarOrVectorType(uint32_t id) const;
   bool IsUnsignedIntScalarType(uint32_t id) const;
   bool IsUnsignedIntVectorType(uint32_t id) const;
   bool IsSignedIntScalarType(uint32_t id) const;
   bool IsSignedIntVectorType(uint32_t id) const;
   bool IsBoolScalarType(uint32_t id) const;
   bool IsBoolVectorType(uint32_t id) const;
+  bool IsBoolScalarOrVectorType(uint32_t id) const;
   bool IsPointerType(uint32_t id) const;
+
+  // Gets value from OpConstant and OpSpecConstant as uint64.
+  // Returns false on failure (no instruction, wrong instruction, not int).
+  bool GetConstantValUint64(uint32_t id, uint64_t* val) const;
 
   // Returns type_id if id has type or zero otherwise.
   uint32_t GetTypeId(uint32_t id) const;
+
+  // Returns opcode of the instruction which issued the id or OpNop if the
+  // instruction is not registered.
+  SpvOp GetIdOpcode(uint32_t id) const;
 
   // Returns type_id for given id operand if it has a type or zero otherwise.
   // |operand_index| is expected to be pointing towards an operand which is an
@@ -390,8 +410,8 @@ class ValidationState_t {
                             size_t operand_index) const;
 
   // Provides information on pointer type. Returns false iff not pointer type.
-  bool GetPointerTypeInfo(
-      uint32_t id, uint32_t* data_type, uint32_t* storage_class) const;
+  bool GetPointerTypeInfo(uint32_t id, uint32_t* data_type,
+                          uint32_t* storage_class) const;
 
  private:
   ValidationState_t(const ValidationState_t&);
@@ -420,7 +440,9 @@ class ValidationState_t {
   /// The section of the code being processed
   ModuleLayoutSection current_layout_section_;
 
-  /// A list of functions in the module
+  /// A list of functions in the module.
+  /// Pointers to objects in this container are guaranteed to be stable and
+  /// valid until the end of lifetime of the validation state.
   std::deque<Function> module_functions_;
 
   /// Capabilities declared in the module
@@ -430,6 +452,8 @@ class ValidationState_t {
   libspirv::ExtensionSet module_extensions_;
 
   /// List of all instructions in the order they appear in the binary
+  /// Pointers to objects in this container are guaranteed to be stable and
+  /// valid until the end of lifetime of the validation state.
   std::deque<Instruction> ordered_instructions_;
 
   /// Instructions that can be referenced by Ids
@@ -476,11 +500,14 @@ class ValidationState_t {
   /// NOTE: See correspoding getter functions
   bool in_function_;
 
-  // The state of optional features.  These are determined by capabilities
-  // declared by the module.
+  /// The state of optional features.  These are determined by capabilities
+  /// declared by the module.
   Feature features_;
+
+  /// Maps function ids to function stat objects.
+  std::unordered_map<uint32_t, Function*> id_to_function_;
 };
 
-}  /// namespace libspirv
+}  // namespace libspirv
 
 #endif  /// LIBSPIRV_VAL_VALIDATIONSTATE_H_

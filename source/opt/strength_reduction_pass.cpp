@@ -21,6 +21,7 @@
 #include <unordered_set>
 
 #include "def_use_manager.h"
+#include "ir_context.h"
 #include "log.h"
 #include "reflect.h"
 
@@ -52,39 +53,36 @@ bool IsPowerOf2(uint32_t val) {
 namespace spvtools {
 namespace opt {
 
-Pass::Status StrengthReductionPass::Process(ir::Module* module) {
+Pass::Status StrengthReductionPass::Process(ir::IRContext* c) {
+  InitializeProcessing(c);
+
   // Initialize the member variables on a per module basis.
   bool modified = false;
-  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
   int32_type_id_ = 0;
   uint32_type_id_ = 0;
   std::memset(constant_ids_, 0, sizeof(constant_ids_));
-  next_id_ = module->IdBound();
-  module_ = module;
 
   FindIntTypesAndConstants();
   modified = ScanFunctions();
-  // Have to reset the id bound.
-  module->SetIdBound(next_id_);
   return (modified ? Status::SuccessWithChange : Status::SuccessWithoutChange);
 }
 
 bool StrengthReductionPass::ReplaceMultiplyByPowerOf2(
-    ir::BasicBlock::iterator* instPtr) {
-  ir::BasicBlock::iterator& inst = *instPtr;
-  assert(inst->opcode() == SpvOp::SpvOpIMul &&
+    ir::BasicBlock::iterator* inst) {
+  assert((*inst)->opcode() == SpvOp::SpvOpIMul &&
          "Only works for multiplication of integers.");
   bool modified = false;
 
   // Currently only works on 32-bit integers.
-  if (inst->type_id() != int32_type_id_ && inst->type_id() != uint32_type_id_) {
+  if ((*inst)->type_id() != int32_type_id_ &&
+      (*inst)->type_id() != uint32_type_id_) {
     return modified;
   }
 
   // Check the operands for a constant that is a power of 2.
   for (int i = 0; i < 2; i++) {
-    uint32_t opId = inst->GetSingleWordInOperand(i);
-    ir::Instruction* opInst = def_use_mgr_->GetDef(opId);
+    uint32_t opId = (*inst)->GetSingleWordInOperand(i);
+    ir::Instruction* opInst = get_def_use_mgr()->GetDef(opId);
     if (opInst->opcode() == SpvOp::SpvOpConstant) {
       // We found a constant operand.
       uint32_t constVal = opInst->GetSingleWordOperand(2);
@@ -95,24 +93,26 @@ bool StrengthReductionPass::ReplaceMultiplyByPowerOf2(
         uint32_t shiftConstResultId = GetConstantId(shiftAmount);
 
         // Create the new instruction.
-        uint32_t newResultId = next_id_++;
+        uint32_t newResultId = TakeNextId();
         std::vector<ir::Operand> newOperands;
-        newOperands.push_back(inst->GetInOperand(1 - i));
+        newOperands.push_back((*inst)->GetInOperand(1 - i));
         ir::Operand shiftOperand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
                                  {shiftConstResultId});
         newOperands.push_back(shiftOperand);
         std::unique_ptr<ir::Instruction> newInstruction(
-            new ir::Instruction(SpvOp::SpvOpShiftLeftLogical, inst->type_id(),
-                                newResultId, newOperands));
+            new ir::Instruction(context(), SpvOp::SpvOpShiftLeftLogical,
+                                (*inst)->type_id(), newResultId, newOperands));
 
         // Insert the new instruction and update the data structures.
-        def_use_mgr_->AnalyzeInstDefUse(&*newInstruction);
-        inst = inst.InsertBefore(std::move(newInstruction));
-        ++inst;
-        def_use_mgr_->ReplaceAllUsesWith(inst->result_id(), newResultId);
+        (*inst) = (*inst).InsertBefore(std::move(newInstruction));
+        get_def_use_mgr()->AnalyzeInstDefUse(&*(*inst));
+        ++(*inst);
+        context()->ReplaceAllUsesWith((*inst)->result_id(), newResultId);
 
         // Remove the old instruction.
-        def_use_mgr_->KillInst(&*inst);
+        ir::Instruction* inst_to_delete = &*(*inst);
+        --(*inst);
+        context()->KillInst(inst_to_delete);
 
         // We do not want to replace the instruction twice if both operands
         // are constants that are a power of 2.  So we break here.
@@ -125,18 +125,13 @@ bool StrengthReductionPass::ReplaceMultiplyByPowerOf2(
 }
 
 void StrengthReductionPass::FindIntTypesAndConstants() {
-  for (auto iter = module_->types_values_begin();
-       iter != module_->types_values_end(); ++iter) {
+  analysis::Integer int32(32, true);
+  int32_type_id_ = context()->get_type_mgr()->GetId(&int32);
+  analysis::Integer uint32(32, false);
+  uint32_type_id_ = context()->get_type_mgr()->GetId(&uint32);
+  for (auto iter = get_module()->types_values_begin();
+       iter != get_module()->types_values_end(); ++iter) {
     switch (iter->opcode()) {
-      case SpvOp::SpvOpTypeInt:
-        if (iter->GetSingleWordOperand(1) == 32) {
-          if (iter->GetSingleWordOperand(2) == 1) {
-            int32_type_id_ = iter->result_id();
-          } else {
-            uint32_type_id_ = iter->result_id();
-          }
-        }
-        break;
       case SpvOp::SpvOpConstant:
         if (iter->type_id() == uint32_type_id_) {
           uint32_t value = iter->GetSingleWordOperand(2);
@@ -155,16 +150,22 @@ uint32_t StrengthReductionPass::GetConstantId(uint32_t val) {
 
   if (constant_ids_[val] == 0) {
     if (uint32_type_id_ == 0) {
-      uint32_type_id_ = CreateUint32Type();
+      analysis::Integer uint(32, false);
+      uint32_type_id_ = context()->get_type_mgr()->GetTypeInstruction(&uint);
     }
 
     // Construct the constant.
-    uint32_t resultId = next_id_++;
+    uint32_t resultId = TakeNextId();
     ir::Operand constant(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
                          {val});
-    std::unique_ptr<ir::Instruction> newConstant(new ir::Instruction(
-        SpvOp::SpvOpConstant, uint32_type_id_, resultId, {constant}));
-    module_->AddGlobalValue(std::move(newConstant));
+    std::unique_ptr<ir::Instruction> newConstant(
+        new ir::Instruction(context(), SpvOp::SpvOpConstant, uint32_type_id_,
+                            resultId, {constant}));
+    get_module()->AddGlobalValue(std::move(newConstant));
+
+    // Notify the DefUseManager about this constant.
+    auto constantIter = --get_module()->types_values_end();
+    get_def_use_mgr()->AnalyzeInstDef(&*constantIter);
 
     // Store the result id for next time.
     constant_ids_[val] = resultId;
@@ -178,7 +179,7 @@ bool StrengthReductionPass::ScanFunctions() {
   // the instruction gets a pointer to the instruction.  We cannot use that to
   // insert a new instruction.  I want an iterator.
   bool modified = false;
-  for (auto& func : *module_) {
+  for (auto& func : *get_module()) {
     for (auto& bb : func) {
       for (auto inst = bb.begin(); inst != bb.end(); ++inst) {
         switch (inst->opcode()) {
@@ -192,18 +193,6 @@ bool StrengthReductionPass::ScanFunctions() {
     }
   }
   return modified;
-}
-
-uint32_t StrengthReductionPass::CreateUint32Type() {
-  uint32_t type_id = next_id_++;
-  ir::Operand widthOperand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
-                           {32});
-  ir::Operand signOperand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
-                          {0});
-  std::unique_ptr<ir::Instruction> newType(new ir::Instruction(
-      SpvOp::SpvOpTypeInt, type_id, 0, {widthOperand, signOperand}));
-  module_->AddType(std::move(newType));
-  return type_id;
 }
 
 }  // namespace opt

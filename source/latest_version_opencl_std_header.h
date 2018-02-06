@@ -12,19 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_
-#define SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_
+#ifndef LIBSPIRV_LATEST_VERSION_OPENCL_STD_HEADER_H_
+#define LIBSPIRV_LATEST_VERSION_OPENCL_STD_HEADER_H_
 
-#include "source/comp/markv_model.h"
+#include "spirv/unified1/OpenCL.std.h"
 
-namespace spvtools {
-
-// MARK-V model designed to be a default model for shader compression.
-class MarkvModelShaderDefault : public MarkvModel {
- public:
-  MarkvModelShaderDefault();
-};
-
-}  // namespace spvtools
-
-#endif  // SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_
+#endif  // LIBSPIRV_LATEST_VERSION_OPENCL_STD_HEADER_H_

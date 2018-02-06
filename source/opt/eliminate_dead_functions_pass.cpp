@@ -13,15 +13,15 @@
 // limitations under the License.
 
 #include "eliminate_dead_functions_pass.h"
+#include "ir_context.h"
 
 #include <unordered_set>
 
 namespace spvtools {
 namespace opt {
 
-Pass::Status EliminateDeadFunctionsPass::Process(ir::Module* module) {
-  bool modified = false;
-  module_ = module;
+Pass::Status EliminateDeadFunctionsPass::Process(ir::IRContext* c) {
+  InitializeProcessing(c);
 
   // Identify live functions first.  Those that are not live
   // are dead.
@@ -30,11 +30,11 @@ Pass::Status EliminateDeadFunctionsPass::Process(ir::Module* module) {
     live_function_set.insert(fp);
     return false;
   };
-  ProcessReachableCallTree(mark_live, module);
+  ProcessReachableCallTree(mark_live, context());
 
-  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
-  FindNamedOrDecoratedIds();
-  for (auto funcIter = module->begin(); funcIter != module->end();) {
+  bool modified = false;
+  for (auto funcIter = get_module()->begin();
+       funcIter != get_module()->end();) {
     if (live_function_set.count(&*funcIter) == 0) {
       modified = true;
       EliminateFunction(&*funcIter);
@@ -51,11 +51,7 @@ Pass::Status EliminateDeadFunctionsPass::Process(ir::Module* module) {
 void EliminateDeadFunctionsPass::EliminateFunction(ir::Function* func) {
   // Remove all of the instruction in the function body
   func->ForEachInst(
-      [this](ir::Instruction* inst) {
-        KillNamesAndDecorates(inst);
-        def_use_mgr_->KillInst(inst);
-      },
-      true);
+      [this](ir::Instruction* inst) { context()->KillInst(inst); }, true);
 }
 }  // namespace opt
 }  // namespace spvtools

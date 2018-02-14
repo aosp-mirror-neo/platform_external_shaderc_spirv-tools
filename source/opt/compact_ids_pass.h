@@ -15,7 +15,6 @@
 #ifndef LIBSPIRV_OPT_COMPACT_IDS_PASS_H_
 #define LIBSPIRV_OPT_COMPACT_IDS_PASS_H_
 
-#include "ir_context.h"
 #include "module.h"
 #include "pass.h"
 
@@ -26,7 +25,7 @@ namespace opt {
 class CompactIdsPass : public Pass {
  public:
   const char* name() const override { return "compact-ids"; }
-  Status Process(ir::IRContext*) override;
+  Status Process(ir::Module*) override;
 };
 
 }  // namespace opt

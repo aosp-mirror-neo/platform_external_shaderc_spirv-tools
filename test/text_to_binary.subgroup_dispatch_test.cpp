@@ -17,14 +17,14 @@
 
 #include "unit_spirv.h"
 
-#include "gmock/gmock.h"
 #include "test_fixture.h"
+#include "gmock/gmock.h"
 
 namespace {
 
 using ::spvtest::MakeInstruction;
-using std::vector;
 using ::testing::Eq;
+using std::vector;
 
 using OpGetKernelLocalSizeForSubgroupCountTest = spvtest::TextToBinaryTest;
 

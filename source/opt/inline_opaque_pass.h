@@ -20,21 +20,22 @@
 #include <algorithm>
 #include <list>
 #include <memory>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
 
 #include "def_use_manager.h"
-#include "inline_pass.h"
 #include "module.h"
+#include "inline_pass.h"
 
 namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
 class InlineOpaquePass : public InlinePass {
+
  public:
   InlineOpaquePass();
-  Status Process(ir::IRContext* c) override;
+  Status Process(ir::Module*) override;
 
   const char* name() const override { return "inline-entry-points-opaque"; }
 
@@ -50,7 +51,7 @@ class InlineOpaquePass : public InlinePass {
   // if func is modified.
   bool InlineOpaque(ir::Function* func);
 
-  void Initialize(ir::IRContext* c);
+  void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 };
 

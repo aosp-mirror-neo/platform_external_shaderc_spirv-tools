@@ -27,7 +27,6 @@
 namespace spvtools {
 namespace ir {
 
-class IRContext;
 class Module;
 
 // A SPIR-V function.
@@ -39,22 +38,17 @@ class Function {
   // Creates a function instance declared by the given OpFunction instruction
   // |def_inst|.
   inline explicit Function(std::unique_ptr<Instruction> def_inst);
-
-  explicit Function(const Function& f) = delete;
-
-  // Creates a clone of the instruction in the given |context|
+  // Creates a function instance based on the given function |f|.
   //
   // The parent module will default to null and needs to be explicitly set by
   // the user.
-  Function* Clone(IRContext*) const;
+  explicit Function(const Function& f);
   // The OpFunction instruction that begins the definition of this function.
   Instruction& DefInst() { return *def_inst_; }
   const Instruction& DefInst() const { return *def_inst_; }
 
   // Sets the enclosing module for this function.
   void SetParent(Module* module) { module_ = module; }
-  // Gets the enclosing module for this function
-  Module* GetParent() const { return module_; }
   // Appends a parameter to this function.
   inline void AddParameter(std::unique_ptr<Instruction> p);
   // Appends a basic block to this function.
@@ -64,11 +58,14 @@ class Function {
   inline void SetFunctionEnd(std::unique_ptr<Instruction> end_inst);
 
   // Returns the given function end instruction.
-  inline Instruction* EndInst() { return end_inst_.get(); }
-  inline const Instruction* EndInst() const { return end_inst_.get(); }
+  inline Instruction* function_end() { return end_inst_.get(); }
+  inline const Instruction& function_end() const { return *end_inst_; }
 
   // Returns function's id
   inline uint32_t result_id() const { return def_inst_->result_id(); }
+
+//  // Returns function's type id
+//  inline uint32_t type_id() const { return def_inst_->GetSingleWordInOperand(1u); }
 
   // Returns function's return type id
   inline uint32_t type_id() const { return def_inst_->type_id(); }
@@ -78,8 +75,6 @@ class Function {
 
   iterator begin() { return iterator(&blocks_, blocks_.begin()); }
   iterator end() { return iterator(&blocks_, blocks_.end()); }
-  const_iterator begin() const { return cbegin(); }
-  const_iterator end() const { return cend(); }
   const_iterator cbegin() const {
     return const_iterator(&blocks_, blocks_.cbegin());
   }
@@ -111,9 +106,6 @@ class Function {
   // The OpFunctionEnd instruction.
   std::unique_ptr<Instruction> end_inst_;
 };
-
-// Pretty-prints |func| to |str|. Returns |str|.
-std::ostream& operator<<(std::ostream& str, const Function& func);
 
 inline Function::Function(std::unique_ptr<Instruction> def_inst)
     : module_(nullptr), def_inst_(std::move(def_inst)), end_inst_() {}

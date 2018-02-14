@@ -25,8 +25,8 @@
 #include "operand.h"
 #include "util/ilist.h"
 
-#include "latest_version_spirv_header.h"
 #include "spirv-tools/libspirv.h"
+#include "spirv/1.2/spirv.h"
 
 namespace spvtools {
 namespace ir {
@@ -53,12 +53,12 @@ class InstructionList : public utils::IntrusiveList<Instruction> {
   }
 
   // Destroy this list and any instructions in the list.
-  inline virtual ~InstructionList();
+  virtual ~InstructionList();
 
   class iterator : public utils::IntrusiveList<Instruction>::iterator {
    public:
     iterator(const utils::IntrusiveList<Instruction>::iterator& i)
-        : utils::IntrusiveList<Instruction>::iterator(i) {}
+        : utils::IntrusiveList<Instruction>::iterator(&*i) {}
     iterator(Instruction* i) : utils::IntrusiveList<Instruction>::iterator(i) {}
 
     // DEPRECATED: Please use MoveBefore with an InstructionList instead.
@@ -74,16 +74,6 @@ class InstructionList : public utils::IntrusiveList<Instruction> {
     // will be an iterator pointing to the newly inserted node.  The owner of
     // |*i| becomes |*this|
     iterator InsertBefore(std::unique_ptr<Instruction>&& i);
-
-    // Removes the node from the list, and deletes the storage.  Returns a valid
-    // iterator to the next node.
-    iterator Erase() {
-      iterator_template next_node = *this;
-      ++next_node;
-      node_->RemoveFromList();
-      delete node_;
-      return next_node;
-    }
   };
 
   iterator begin() { return utils::IntrusiveList<Instruction>::begin(); }
@@ -94,35 +84,7 @@ class InstructionList : public utils::IntrusiveList<Instruction> {
   const_iterator end() const {
     return utils::IntrusiveList<Instruction>::end();
   }
-
-  void push_back(std::unique_ptr<Instruction>&& inst) {
-    utils::IntrusiveList<Instruction>::push_back(inst.release());
-  }
-
-  // Same as in the base class, except it will delete the data as well.
-  inline void clear();
-
-  // Runs the given function |f| on the instructions in the list and optionally
-  // on the preceding debug line instructions.
-  inline void ForEachInst(const std::function<void(Instruction*)>& f,
-                          bool run_on_debug_line_insts) {
-    auto next = begin();
-    for (auto i = next; i != end(); i = next) {
-      ++next;
-      i->ForEachInst(f, run_on_debug_line_insts);
-    }
-  }
 };
-
-InstructionList::~InstructionList() { clear(); }
-
-void InstructionList::clear() {
-  while (!empty()) {
-    Instruction* inst = &front();
-    inst->RemoveFromList();
-    delete inst;
-  }
-}
 
 }  // namespace ir
 }  // namespace spvtools

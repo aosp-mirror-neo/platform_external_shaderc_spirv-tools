@@ -23,9 +23,7 @@
 #include <vector>
 
 #include "decoration_manager.h"
-#include "ir_context.h"
 #include "opcode.h"
-#include "reflect.h"
 
 namespace spvtools {
 namespace opt {
@@ -33,36 +31,34 @@ namespace opt {
 using ir::Instruction;
 using ir::Module;
 using ir::Operand;
-using opt::analysis::DecorationManager;
 using opt::analysis::DefUseManager;
+using opt::analysis::DecorationManager;
 
-Pass::Status RemoveDuplicatesPass::Process(ir::IRContext* ir_context) {
-  bool modified = RemoveDuplicateCapabilities(ir_context);
-  modified |= RemoveDuplicatesExtInstImports(ir_context);
-  modified |= RemoveDuplicateTypes(ir_context);
-  modified |= RemoveDuplicateDecorations(ir_context);
+Pass::Status RemoveDuplicatesPass::Process(Module* module) {
+  DefUseManager defUseManager(consumer(), module);
+  DecorationManager decManager(module);
+
+  bool modified = RemoveDuplicateCapabilities(module);
+  modified |= RemoveDuplicatesExtInstImports(module, defUseManager);
+  modified |= RemoveDuplicateTypes(module, defUseManager, decManager);
+  modified |= RemoveDuplicateDecorations(module);
 
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-bool RemoveDuplicatesPass::RemoveDuplicateCapabilities(
-    ir::IRContext* ir_context) const {
+bool RemoveDuplicatesPass::RemoveDuplicateCapabilities(Module* module) const {
   bool modified = false;
 
-  if (ir_context->capabilities().empty()) {
-    return modified;
-  }
-
   std::unordered_set<uint32_t> capabilities;
-  for (auto* i = &*ir_context->capability_begin(); i;) {
+  for (auto i = module->capability_begin(); i != module->capability_end();) {
     auto res = capabilities.insert(i->GetSingleWordOperand(0u));
 
     if (res.second) {
       // Never seen before, keep it.
-      i = i->NextNode();
+      ++i;
     } else {
       // It's a duplicate, remove it.
-      i = ir_context->KillInst(i);
+      i = i.Erase();
       modified = true;
     }
   }
@@ -71,25 +67,22 @@ bool RemoveDuplicatesPass::RemoveDuplicateCapabilities(
 }
 
 bool RemoveDuplicatesPass::RemoveDuplicatesExtInstImports(
-    ir::IRContext* ir_context) const {
+    Module* module, analysis::DefUseManager& defUseManager) const {
   bool modified = false;
 
-  if (ir_context->ext_inst_imports().empty()) {
-    return modified;
-  }
-
-  std::unordered_map<std::string, SpvId> ext_inst_imports;
-  for (auto* i = &*ir_context->ext_inst_import_begin(); i;) {
-    auto res = ext_inst_imports.emplace(
+  std::unordered_map<std::string, SpvId> extInstImports;
+  for (auto i = module->ext_inst_import_begin();
+       i != module->ext_inst_import_end();) {
+    auto res = extInstImports.emplace(
         reinterpret_cast<const char*>(i->GetInOperand(0u).words.data()),
         i->result_id());
     if (res.second) {
       // Never seen before, keep it.
-      i = i->NextNode();
+      ++i;
     } else {
       // It's a duplicate, remove it.
-      ir_context->ReplaceAllUsesWith(i->result_id(), res.first->second);
-      i = ir_context->KillInst(i);
+      defUseManager.ReplaceAllUsesWith(i->result_id(), res.first->second);
+      i = i.Erase();
       modified = true;
     }
   }
@@ -98,88 +91,79 @@ bool RemoveDuplicatesPass::RemoveDuplicatesExtInstImports(
 }
 
 bool RemoveDuplicatesPass::RemoveDuplicateTypes(
-    ir::IRContext* ir_context) const {
+    Module* module, DefUseManager& defUseManager,
+    DecorationManager& decManager) const {
   bool modified = false;
 
-  if (ir_context->types_values().empty()) {
-    return modified;
-  }
+  std::vector<Instruction> visitedTypes;
+  visitedTypes.reserve(module->types_values().size());
 
-  std::vector<Instruction*> visited_types;
-  std::vector<Instruction*> to_delete;
-  for (auto* i = &*ir_context->types_values_begin(); i; i = i->NextNode()) {
+  for (auto i = module->types_values_begin();
+       i != module->types_values_end();) {
     // We only care about types.
     if (!spvOpcodeGeneratesType((i->opcode())) &&
         i->opcode() != SpvOpTypeForwardPointer) {
+      ++i;
       continue;
     }
 
     // Is the current type equal to one of the types we have aready visited?
-    SpvId id_to_keep = 0u;
-    // TODO(dneto0): Use a trie to avoid quadratic behaviour? Extract the
-    // ResultIdTrie from unify_const_pass.cpp for this.
-    for (auto j : visited_types) {
-      if (AreTypesEqual(*i, *j, ir_context)) {
-        id_to_keep = j->result_id();
+    SpvId idToKeep = 0u;
+    for (auto j : visitedTypes) {
+      if (AreTypesEqual(*i, j, defUseManager, decManager)) {
+        idToKeep = j.result_id();
         break;
       }
     }
 
-    if (id_to_keep == 0u) {
+    if (idToKeep == 0u) {
       // This is a never seen before type, keep it around.
-      visited_types.emplace_back(i);
+      visitedTypes.emplace_back(*i);
+      ++i;
     } else {
       // The same type has already been seen before, remove this one.
-      ir_context->ReplaceAllUsesWith(i->result_id(), id_to_keep);
+      defUseManager.ReplaceAllUsesWith(i->result_id(), idToKeep);
       modified = true;
-      to_delete.emplace_back(i);
+      i = i.Erase();
     }
-  }
-
-  for (auto i : to_delete) {
-    ir_context->KillInst(i);
   }
 
   return modified;
 }
 
-// TODO(pierremoreau): Duplicate decoration groups should be removed. For
-// example, in
-//     OpDecorate %1 Constant
-//     %1 = OpDecorationGroup
-//     OpDecorate %2 Constant
-//     %2 = OpDecorationGroup
-//     OpGroupDecorate %1 %3
-//     OpGroupDecorate %2 %4
-// group %2 could be removed.
 bool RemoveDuplicatesPass::RemoveDuplicateDecorations(
-    ir::IRContext* ir_context) const {
+    ir::Module* module) const {
   bool modified = false;
 
-  std::vector<const Instruction*> visited_decorations;
+  std::unordered_map<SpvId, const Instruction*> constants;
+  for (const auto& i : module->types_values())
+    if (i.opcode() == SpvOpConstant) constants[i.result_id()] = &i;
+  for (const auto& i : module->types_values())
+    if (i.opcode() == SpvOpConstant) constants[i.result_id()] = &i;
 
-  opt::analysis::DecorationManager decoration_manager(ir_context->module());
-  for (auto* i = &*ir_context->annotation_begin(); i;) {
+  std::vector<const Instruction*> visitedDecorations;
+  visitedDecorations.reserve(module->annotations().size());
+
+  opt::analysis::DecorationManager decorationManager(module);
+  for (auto i = module->annotation_begin(); i != module->annotation_end();) {
     // Is the current decoration equal to one of the decorations we have aready
     // visited?
-    bool already_visited = false;
-    // TODO(dneto0): Use a trie to avoid quadratic behaviour? Extract the
-    // ResultIdTrie from unify_const_pass.cpp for this.
-    for (const Instruction* j : visited_decorations) {
-      if (decoration_manager.AreDecorationsTheSame(&*i, j, false)) {
-        already_visited = true;
+    bool alreadyVisited = false;
+    for (const Instruction* j : visitedDecorations) {
+      if (decorationManager.AreDecorationsTheSame(&*i, j)) {
+        alreadyVisited = true;
         break;
       }
     }
 
-    if (!already_visited) {
+    if (!alreadyVisited) {
       // This is a never seen before decoration, keep it around.
-      visited_decorations.emplace_back(&*i);
-      i = i->NextNode();
+      visitedDecorations.emplace_back(&*i);
+      ++i;
     } else {
       // The same decoration has already been seen before, remove this one.
       modified = true;
-      i = ir_context->KillInst(i);
+      i = i.Erase();
     }
   }
 
@@ -188,17 +172,102 @@ bool RemoveDuplicatesPass::RemoveDuplicateDecorations(
 
 bool RemoveDuplicatesPass::AreTypesEqual(const Instruction& inst1,
                                          const Instruction& inst2,
-                                         ir::IRContext* context) {
+                                         const DefUseManager& defUseManager,
+                                         const DecorationManager& decManager) {
   if (inst1.opcode() != inst2.opcode()) return false;
-  if (!ir::IsTypeInst(inst1.opcode())) return false;
+  if (!decManager.HaveTheSameDecorations(inst1.result_id(), inst2.result_id()))
+    return false;
 
-  const analysis::Type* type1 =
-      context->get_type_mgr()->GetType(inst1.result_id());
-  const analysis::Type* type2 =
-      context->get_type_mgr()->GetType(inst2.result_id());
-  if (type1 && type2 && *type1 == *type2) return true;
-
-  return false;
+  switch (inst1.opcode()) {
+    case SpvOpTypeVoid:
+    case SpvOpTypeBool:
+    case SpvOpTypeSampler:
+    case SpvOpTypeEvent:
+    case SpvOpTypeDeviceEvent:
+    case SpvOpTypeReserveId:
+    case SpvOpTypeQueue:
+    case SpvOpTypePipeStorage:
+    case SpvOpTypeNamedBarrier:
+      return true;
+    case SpvOpTypeInt:
+      return inst1.GetSingleWordInOperand(0u) ==
+                 inst2.GetSingleWordInOperand(0u) &&
+             inst1.GetSingleWordInOperand(1u) ==
+                 inst2.GetSingleWordInOperand(1u);
+    case SpvOpTypeFloat:
+    case SpvOpTypePipe:
+    case SpvOpTypeForwardPointer:
+      return inst1.GetSingleWordInOperand(0u) ==
+             inst2.GetSingleWordInOperand(0u);
+    case SpvOpTypeVector:
+    case SpvOpTypeMatrix:
+      return AreTypesEqual(
+                 *defUseManager.GetDef(inst1.GetSingleWordInOperand(0u)),
+                 *defUseManager.GetDef(inst2.GetSingleWordInOperand(0u)),
+                 defUseManager, decManager) &&
+             inst1.GetSingleWordInOperand(1u) ==
+                 inst2.GetSingleWordInOperand(1u);
+    case SpvOpTypeImage:
+      return AreTypesEqual(
+                 *defUseManager.GetDef(inst1.GetSingleWordInOperand(0u)),
+                 *defUseManager.GetDef(inst2.GetSingleWordInOperand(0u)),
+                 defUseManager, decManager) &&
+             inst1.GetSingleWordInOperand(1u) ==
+                 inst2.GetSingleWordInOperand(1u) &&
+             inst1.GetSingleWordInOperand(2u) ==
+                 inst2.GetSingleWordInOperand(2u) &&
+             inst1.GetSingleWordInOperand(3u) ==
+                 inst2.GetSingleWordInOperand(3u) &&
+             inst1.GetSingleWordInOperand(4u) ==
+                 inst2.GetSingleWordInOperand(4u) &&
+             inst1.GetSingleWordInOperand(5u) ==
+                 inst2.GetSingleWordInOperand(5u) &&
+             inst1.GetSingleWordInOperand(6u) ==
+                 inst2.GetSingleWordInOperand(6u) &&
+             inst1.NumOperands() == inst2.NumOperands() &&
+             (inst1.NumInOperands() == 7u ||
+              inst1.GetSingleWordInOperand(7u) ==
+                  inst2.GetSingleWordInOperand(7u));
+    case SpvOpTypeSampledImage:
+    case SpvOpTypeRuntimeArray:
+      return AreTypesEqual(
+          *defUseManager.GetDef(inst1.GetSingleWordInOperand(0u)),
+          *defUseManager.GetDef(inst2.GetSingleWordInOperand(0u)),
+          defUseManager, decManager);
+    case SpvOpTypeArray:
+      return AreTypesEqual(
+                 *defUseManager.GetDef(inst1.GetSingleWordInOperand(0u)),
+                 *defUseManager.GetDef(inst2.GetSingleWordInOperand(0u)),
+                 defUseManager, decManager) &&
+             AreTypesEqual(
+                 *defUseManager.GetDef(inst1.GetSingleWordInOperand(1u)),
+                 *defUseManager.GetDef(inst2.GetSingleWordInOperand(1u)),
+                 defUseManager, decManager);
+    case SpvOpTypeStruct:
+    case SpvOpTypeFunction: {
+      bool res = inst1.NumInOperands() == inst2.NumInOperands();
+      for (uint32_t i = 0u; i < inst1.NumInOperands() && res; ++i)
+        res &= AreTypesEqual(
+            *defUseManager.GetDef(inst1.GetSingleWordInOperand(i)),
+            *defUseManager.GetDef(inst2.GetSingleWordInOperand(i)),
+            defUseManager, decManager);
+      return res;
+    }
+    case SpvOpTypeOpaque:
+      return std::strcmp(reinterpret_cast<const char*>(
+                             inst1.GetInOperand(0u).words.data()),
+                         reinterpret_cast<const char*>(
+                             inst2.GetInOperand(0u).words.data())) == 0;
+    case SpvOpTypePointer:
+      return inst1.GetSingleWordInOperand(0u) ==
+                 inst2.GetSingleWordInOperand(0u) &&
+             AreTypesEqual(
+                 *defUseManager.GetDef(inst1.GetSingleWordInOperand(1u)),
+                 *defUseManager.GetDef(inst2.GetSingleWordInOperand(1u)),
+                 defUseManager, decManager);
+    default:
+      return false;
+  }
 }
 
 }  // namespace opt

@@ -15,7 +15,7 @@
 #ifndef LIBSPIRV_OPT_REFLECT_H_
 #define LIBSPIRV_OPT_REFLECT_H_
 
-#include "latest_version_spirv_header.h"
+#include "spirv/1.2/spirv.h"
 
 namespace spvtools {
 namespace ir {
@@ -38,8 +38,7 @@ inline bool IsDebugLineInst(SpvOp opcode) {
   return opcode == SpvOpLine || opcode == SpvOpNoLine;
 }
 inline bool IsAnnotationInst(SpvOp opcode) {
-  return (opcode >= SpvOpDecorate && opcode <= SpvOpGroupMemberDecorate) ||
-         opcode == SpvOpDecorateId;
+  return opcode >= SpvOpDecorate && opcode <= SpvOpGroupMemberDecorate;
 }
 inline bool IsTypeInst(SpvOp opcode) {
   return (opcode >= SpvOpTypeVoid && opcode <= SpvOpTypeForwardPointer) ||
@@ -47,12 +46,6 @@ inline bool IsTypeInst(SpvOp opcode) {
 }
 inline bool IsConstantInst(SpvOp opcode) {
   return opcode >= SpvOpConstantTrue && opcode <= SpvOpSpecConstantOp;
-}
-inline bool IsCompileTimeConstantInst(SpvOp opcode) {
-  return opcode >= SpvOpConstantTrue && opcode <= SpvOpConstantNull;
-}
-inline bool IsSpecConstantInst(SpvOp opcode) {
-  return opcode >= SpvOpSpecConstantTrue && opcode <= SpvOpSpecConstantOp;
 }
 inline bool IsTerminatorInst(SpvOp opcode) {
   return opcode >= SpvOpBranch && opcode <= SpvOpUnreachable;

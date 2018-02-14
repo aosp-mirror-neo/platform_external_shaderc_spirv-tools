@@ -24,11 +24,8 @@ namespace opt {
 namespace {
 
 const uint32_t kEntryPointFunctionIdInIdx = 1;
-const uint32_t kTypePointerTypeIdInIdx = 1;
 
 }  // namespace
-
-Pass::Pass() : consumer_(nullptr), context_(nullptr) {}
 
 void Pass::AddCalls(ir::Function* func, std::queue<uint32_t>* todo) {
   for (auto bi = func->begin(); bi != func->end(); ++bi)
@@ -49,21 +46,20 @@ bool Pass::ProcessEntryPointCallTree(ProcessFunction& pfn, ir::Module* module) {
   return ProcessCallTreeFromRoots(pfn, id2function, &roots);
 }
 
-bool Pass::ProcessReachableCallTree(ProcessFunction& pfn,
-                                    ir::IRContext* irContext) {
+bool Pass::ProcessReachableCallTree(ProcessFunction& pfn, ir::Module* module) {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function;
-  for (auto& fn : *irContext->module()) id2function[fn.result_id()] = &fn;
+  for (auto& fn : *module) id2function[fn.result_id()] = &fn;
 
   std::queue<uint32_t> roots;
 
   // Add all entry points since they can be reached from outside the module.
-  for (auto& e : irContext->module()->entry_points())
+  for (auto& e : module->entry_points())
     roots.push(e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx));
 
   // Add all exported functions since they can be reached from outside the
   // module.
-  for (auto& a : irContext->annotations()) {
+  for (auto& a : module->annotations()) {
     // TODO: Handle group decorations as well.  Currently not generate by any
     // front-end, but could be coming.
     if (a.opcode() == SpvOp::SpvOpDecorate) {
@@ -101,21 +97,6 @@ bool Pass::ProcessCallTreeFromRoots(
   }
   return modified;
 }
-
-Pass::Status Pass::Run(ir::IRContext* ctx) {
-  Pass::Status status = Process(ctx);
-  if (status == Status::SuccessWithChange) {
-    ctx->InvalidateAnalysesExceptFor(GetPreservedAnalyses());
-  }
-  assert(ctx->IsConsistent());
-  return status;
-}
-
-uint32_t Pass::GetPointeeTypeId(const ir::Instruction* ptrInst) const {
-  const uint32_t ptrTypeId = ptrInst->type_id();
-  const ir::Instruction* ptrTypeInst = get_def_use_mgr()->GetDef(ptrTypeId);
-  return ptrTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
-}
-
 }  // namespace opt
 }  // namespace spvtools
+

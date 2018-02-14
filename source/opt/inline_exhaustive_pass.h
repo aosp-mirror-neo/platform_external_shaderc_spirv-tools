@@ -20,21 +20,22 @@
 #include <algorithm>
 #include <list>
 #include <memory>
-#include <unordered_map>
 #include <vector>
+#include <unordered_map>
 
 #include "def_use_manager.h"
-#include "inline_pass.h"
 #include "module.h"
+#include "inline_pass.h"
 
 namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
 class InlineExhaustivePass : public InlinePass {
+
  public:
   InlineExhaustivePass();
-  Status Process(ir::IRContext* c) override;
+  Status Process(ir::Module*) override;
 
   const char* name() const override { return "inline-entry-points-exhaustive"; }
 
@@ -43,7 +44,7 @@ class InlineExhaustivePass : public InlinePass {
   // all code that is inlined into func. Return true if func is modified.
   bool InlineExhaustive(ir::Function* func);
 
-  void Initialize(ir::IRContext* c);
+  void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 };
 

@@ -37,7 +37,7 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
       << GetErrorMessage();
 
   const std::string expected_res = R"(%1 = OpTypeFloat 32
@@ -47,9 +47,9 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
   std::string res_body;
   SetDisassembleOptions(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-  EXPECT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
+  ASSERT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
       << GetErrorMessage();
-  EXPECT_EQ(expected_res, res_body);
+  ASSERT_EQ(expected_res, res_body);
 }
 
 TEST_F(MatchingImportsToExports, NotALibraryExtraExports) {
@@ -61,7 +61,7 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body}, &linked_binary))
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body}, &linked_binary))
       << GetErrorMessage();
 
   const std::string expected_res = R"(%1 = OpTypeFloat 32
@@ -69,9 +69,9 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
   std::string res_body;
   SetDisassembleOptions(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-  EXPECT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
+  ASSERT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
       << GetErrorMessage();
-  EXPECT_EQ(expected_res, res_body);
+  ASSERT_EQ(expected_res, res_body);
 }
 
 TEST_F(MatchingImportsToExports, LibraryExtraExports) {
@@ -85,7 +85,7 @@ OpDecorate %1 LinkageAttributes "foo" Export
   spvtest::Binary linked_binary;
   spvtools::LinkerOptions options;
   options.SetCreateLibrary(true);
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body}, &linked_binary, options))
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body}, &linked_binary, options))
       << GetErrorMessage();
 
   const std::string expected_res = R"(OpCapability Linkage
@@ -95,9 +95,9 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
   std::string res_body;
   SetDisassembleOptions(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-  EXPECT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
+  ASSERT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
       << GetErrorMessage();
-  EXPECT_EQ(expected_res, res_body);
+  ASSERT_EQ(expected_res, res_body);
 }
 
 TEST_F(MatchingImportsToExports, UnresolvedImports) {
@@ -110,10 +110,10 @@ OpDecorate %1 LinkageAttributes "foo" Import
   const std::string body2 = R"()";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
+  ASSERT_EQ(SPV_ERROR_INVALID_BINARY,
             AssembleAndLink({body1, body2}, &linked_binary));
   EXPECT_THAT(GetErrorMessage(),
-              HasSubstr("Unresolved external reference to \"foo\"."));
+              HasSubstr("No export linkage was found for \"foo\"."));
 }
 
 TEST_F(MatchingImportsToExports, TypeMismatch) {
@@ -133,13 +133,12 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
+  ASSERT_EQ(SPV_ERROR_INVALID_BINARY,
             AssembleAndLink({body1, body2}, &linked_binary))
       << GetErrorMessage();
-  EXPECT_THAT(
-      GetErrorMessage(),
-      HasSubstr("Type mismatch on symbol \"foo\" between imported "
-                "variable/function %1 and exported variable/function %4"));
+  EXPECT_THAT(GetErrorMessage(),
+              HasSubstr("Type mismatch between imported variable/function %1 "
+                        "and exported variable/function %4"));
 }
 
 TEST_F(MatchingImportsToExports, MultipleDefinitions) {
@@ -166,12 +165,12 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
+  ASSERT_EQ(SPV_ERROR_INVALID_BINARY,
             AssembleAndLink({body1, body2, body3}, &linked_binary))
       << GetErrorMessage();
-  EXPECT_THAT(GetErrorMessage(),
-              HasSubstr("Too many external references, 2, were found "
-                        "for \"foo\"."));
+  EXPECT_THAT(
+      GetErrorMessage(),
+      HasSubstr("Too many export linkages, 2, were found for \"foo\"."));
 }
 
 TEST_F(MatchingImportsToExports, SameNameDifferentTypes) {
@@ -198,12 +197,12 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
+  ASSERT_EQ(SPV_ERROR_INVALID_BINARY,
             AssembleAndLink({body1, body2, body3}, &linked_binary))
       << GetErrorMessage();
-  EXPECT_THAT(GetErrorMessage(),
-              HasSubstr("Too many external references, 2, were found "
-                        "for \"foo\"."));
+  EXPECT_THAT(
+      GetErrorMessage(),
+      HasSubstr("Too many export linkages, 2, were found for \"foo\"."));
 }
 
 TEST_F(MatchingImportsToExports, DecorationMismatch) {
@@ -224,17 +223,15 @@ OpDecorate %1 LinkageAttributes "foo" Export
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
+  ASSERT_EQ(SPV_ERROR_INVALID_BINARY,
             AssembleAndLink({body1, body2}, &linked_binary))
       << GetErrorMessage();
-  EXPECT_THAT(
-      GetErrorMessage(),
-      HasSubstr("Type mismatch on symbol \"foo\" between imported "
-                "variable/function %1 and exported variable/function %4"));
+  EXPECT_THAT(GetErrorMessage(),
+              HasSubstr("Type mismatch between imported variable/function %1 "
+                        "and exported variable/function %4."));
 }
 
-TEST_F(MatchingImportsToExports,
-       FuncParamAttrDifferButStillMatchExportToImport) {
+TEST_F(MatchingImportsToExports, FuncParamAttr) {
   const std::string body1 = R"(
 OpCapability Kernel
 OpCapability Linkage
@@ -263,7 +260,7 @@ OpFunctionEnd
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
       << GetErrorMessage();
 
   const std::string expected_res = R"(OpCapability Kernel
@@ -279,9 +276,9 @@ OpFunctionEnd
 )";
   std::string res_body;
   SetDisassembleOptions(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-  EXPECT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
+  ASSERT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
       << GetErrorMessage();
-  EXPECT_EQ(expected_res, res_body);
+  ASSERT_EQ(expected_res, res_body);
 }
 
 TEST_F(MatchingImportsToExports, FunctionCtrl) {
@@ -307,7 +304,7 @@ OpFunctionEnd
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary))
       << GetErrorMessage();
 
   const std::string expected_res = R"(%1 = OpTypeVoid
@@ -321,9 +318,9 @@ OpFunctionEnd
 )";
   std::string res_body;
   SetDisassembleOptions(SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-  EXPECT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
+  ASSERT_EQ(SPV_SUCCESS, Disassemble(linked_binary, &res_body))
       << GetErrorMessage();
-  EXPECT_EQ(expected_res, res_body);
+  ASSERT_EQ(expected_res, res_body);
 }
 
 }  // anonymous namespace

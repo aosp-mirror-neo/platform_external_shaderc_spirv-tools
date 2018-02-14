@@ -389,7 +389,8 @@ std::set<uint32_t> AssemblyContext::GetNumericIds() const {
   std::set<uint32_t> ids;
   for (const auto& kv : named_ids_) {
     uint32_t id;
-    if (spvutils::ParseNumber(kv.first.c_str(), &id)) ids.insert(id);
+    if (spvutils::ParseNumber(kv.first.c_str(), &id))
+      ids.insert(id);
   }
   return ids;
 }

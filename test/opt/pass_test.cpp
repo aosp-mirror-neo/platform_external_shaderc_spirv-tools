@@ -27,8 +27,8 @@ using namespace spvtools;
 class DummyPass : public opt::Pass {
  public:
   const char* name() const override { return "dummy-pass"; }
-  Status Process(ir::IRContext* irContext) override {
-    return irContext ? Status::SuccessWithoutChange : Status::Failure;
+  Status Process(ir::Module* module) override {
+    return module ? Status::SuccessWithoutChange : Status::Failure;
   }
 };
 }  // namespace
@@ -76,18 +76,18 @@ TEST_F(PassClassTest, BasicVisitFromEntryPoint) {
 )";
   // clang-format on
 
-  std::unique_ptr<ir::IRContext> localContext =
+  std::unique_ptr<ir::Module> module =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, text,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
-  EXPECT_NE(nullptr, localContext) << "Assembling failed for shader:\n"
-                                   << text << std::endl;
+  EXPECT_NE(nullptr, module) << "Assembling failed for shader:\n"
+                             << text << std::endl;
   DummyPass testPass;
   std::vector<uint32_t> processed;
   opt::Pass::ProcessFunction mark_visited = [&processed](ir::Function* fp) {
     processed.push_back(fp->result_id());
     return false;
   };
-  testPass.ProcessEntryPointCallTree(mark_visited, localContext->module());
+  testPass.ProcessEntryPointCallTree(mark_visited, module.get());
   EXPECT_THAT(processed, UnorderedElementsAre(10, 11));
 }
 
@@ -132,19 +132,18 @@ TEST_F(PassClassTest, BasicVisitReachable) {
 )";
   // clang-format on
 
-  std::unique_ptr<ir::IRContext> localContext =
+  std::unique_ptr<ir::Module> module =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, text,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
-  EXPECT_NE(nullptr, localContext) << "Assembling failed for shader:\n"
-                                   << text << std::endl;
-
+  EXPECT_NE(nullptr, module) << "Assembling failed for shader:\n"
+                             << text << std::endl;
   DummyPass testPass;
   std::vector<uint32_t> processed;
   opt::Pass::ProcessFunction mark_visited = [&processed](ir::Function* fp) {
     processed.push_back(fp->result_id());
     return false;
   };
-  testPass.ProcessReachableCallTree(mark_visited, localContext.get());
+  testPass.ProcessReachableCallTree(mark_visited, module.get());
   EXPECT_THAT(processed, UnorderedElementsAre(10, 11, 12, 13));
 }
 
@@ -184,19 +183,18 @@ TEST_F(PassClassTest, BasicVisitOnlyOnce) {
 )";
   // clang-format on
 
-  std::unique_ptr<ir::IRContext> localContext =
+  std::unique_ptr<ir::Module> module =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, text,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
-  EXPECT_NE(nullptr, localContext) << "Assembling failed for shader:\n"
-                                   << text << std::endl;
-
+  EXPECT_NE(nullptr, module) << "Assembling failed for shader:\n"
+                             << text << std::endl;
   DummyPass testPass;
   std::vector<uint32_t> processed;
   opt::Pass::ProcessFunction mark_visited = [&processed](ir::Function* fp) {
     processed.push_back(fp->result_id());
     return false;
   };
-  testPass.ProcessReachableCallTree(mark_visited, localContext.get());
+  testPass.ProcessReachableCallTree(mark_visited, module.get());
   EXPECT_THAT(processed, UnorderedElementsAre(10, 11, 12));
 }
 
@@ -226,19 +224,18 @@ TEST_F(PassClassTest, BasicDontVisitExportedVariable) {
 )";
   // clang-format on
 
-  std::unique_ptr<ir::IRContext> localContext =
+  std::unique_ptr<ir::Module> module =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, text,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
-  EXPECT_NE(nullptr, localContext) << "Assembling failed for shader:\n"
-                                   << text << std::endl;
-
+  EXPECT_NE(nullptr, module) << "Assembling failed for shader:\n"
+                             << text << std::endl;
   DummyPass testPass;
   std::vector<uint32_t> processed;
   opt::Pass::ProcessFunction mark_visited = [&processed](ir::Function* fp) {
     processed.push_back(fp->result_id());
     return false;
   };
-  testPass.ProcessReachableCallTree(mark_visited, localContext.get());
+  testPass.ProcessReachableCallTree(mark_visited, module.get());
   EXPECT_THAT(processed, UnorderedElementsAre(10));
 }
 }  // namespace

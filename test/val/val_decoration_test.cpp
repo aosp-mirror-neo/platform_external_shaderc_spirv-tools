@@ -15,17 +15,17 @@
 // Common validation fixtures for unit tests
 
 #include "gmock/gmock.h"
-#include "source/val/decoration.h"
 #include "unit_spirv.h"
 #include "val_fixtures.h"
+#include "source/val/decoration.h"
 
 namespace {
 
-using libspirv::Decoration;
 using std::string;
 using std::vector;
-using ::testing::Eq;
 using ::testing::HasSubstr;
+using ::testing::Eq;
+using libspirv::Decoration;
 
 using ValidateDecorations = spvtest::ValidateBase<bool>;
 
@@ -449,3 +449,4 @@ TEST_F(ValidateDecorations, FunctionDefinitionWithoutImportLinkageGood) {
 }
 
 }  // anonymous namespace
+

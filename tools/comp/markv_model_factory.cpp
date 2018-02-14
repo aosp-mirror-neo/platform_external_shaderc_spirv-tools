@@ -13,29 +13,16 @@
 // limitations under the License.
 
 #include "markv_model_factory.h"
-
-#include "markv_model_shader.h"
+#include "markv_model_shader_default.h"
 
 namespace spvtools {
 
 std::unique_ptr<MarkvModel> CreateMarkvModel(MarkvModelType type) {
   std::unique_ptr<MarkvModel> model;
   switch (type) {
-    case kMarkvModelShaderLite: {
-      model.reset(new MarkvModelShaderLite());
+    case kMarkvModelShaderDefault: {
+      model.reset(new MarkvModelShaderDefault());
       break;
-    }
-    case kMarkvModelShaderMid: {
-      model.reset(new MarkvModelShaderMid());
-      break;
-    }
-    case kMarkvModelShaderMax: {
-      model.reset(new MarkvModelShaderMax());
-      break;
-    }
-    case kMarkvModelUnknown: {
-      assert(0 && "kMarkvModelUnknown supplied to CreateMarkvModel");
-      return model;
     }
   }
 

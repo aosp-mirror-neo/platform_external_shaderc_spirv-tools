@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "source/spirv_target_env.h"
-#include "source/table.h"
 #include "spirv-tools/libspirv.hpp"
 #include "spirv-tools/linker.hpp"
 #include "tools/io.h"
@@ -117,10 +116,10 @@ int main(int argc, char** argv) {
     if (!ReadFile<uint32_t>(inFiles[i], "rb", &contents[i])) return 1;
   }
 
-  const spvtools::MessageConsumer consumer = [](spv_message_level_t level,
-                                                const char*,
-                                                const spv_position_t& position,
-                                                const char* message) {
+  spvtools::Linker linker(target_env);
+  linker.SetMessageConsumer([](spv_message_level_t level, const char*,
+                               const spv_position_t& position,
+                               const char* message) {
     switch (level) {
       case SPV_MSG_FATAL:
       case SPV_MSG_INTERNAL_ERROR:
@@ -138,16 +137,14 @@ int main(int argc, char** argv) {
       default:
         break;
     }
-  };
-  spvtools::Context context(target_env);
-  context.SetMessageConsumer(consumer);
+  });
 
   std::vector<uint32_t> linkingResult;
-  spv_result_t status = Link(context, contents, &linkingResult, options);
+  bool succeed = linker.Link(contents, linkingResult, options);
 
   if (!WriteFile<uint32_t>(outFile, "wb", linkingResult.data(),
                            linkingResult.size()))
     return 1;
 
-  return status == SPV_SUCCESS ? 0 : 1;
+  return !succeed;
 }

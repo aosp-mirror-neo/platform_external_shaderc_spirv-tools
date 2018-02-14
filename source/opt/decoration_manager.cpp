@@ -14,18 +14,47 @@
 
 #include "decoration_manager.h"
 
-#include <algorithm>
-#include <set>
 #include <stack>
 
 namespace spvtools {
 namespace opt {
 namespace analysis {
 
-void DecorationManager::RemoveDecorationsFrom(uint32_t id) {
+void DecorationManager::RemoveDecorationsFrom(uint32_t id, bool keep_linkage) {
   auto const ids_iter = id_to_decoration_insts_.find(id);
   if (ids_iter == id_to_decoration_insts_.end()) return;
-  id_to_decoration_insts_.erase(ids_iter);
+
+  for (ir::Instruction* inst : ids_iter->second) {
+    switch (inst->opcode()) {
+      case SpvOpDecorate:
+      case SpvOpDecorateId:
+      case SpvOpMemberDecorate:
+        if (!(keep_linkage && inst->GetSingleWordInOperand(1u) ==
+                                  SpvDecorationLinkageAttributes))
+          inst->ToNop();
+        break;
+      case SpvOpGroupDecorate:
+        for (uint32_t i = 1u; i < inst->NumInOperands(); ++i) {
+          if (inst->GetSingleWordInOperand(i) == inst->result_id()) {
+            // TODO(pierremoreau): This could be optimised by copying the last
+            //                     operand over this one, or using a compacting
+            //                     filtering algorithm over all other IDs
+            inst->RemoveInOperand(i);
+          }
+        }
+        break;
+      case SpvOpGroupMemberDecorate:
+        for (uint32_t i = 1u; i < inst->NumInOperands(); i += 2u) {
+          if (inst->GetSingleWordInOperand(i) == inst->result_id()) {
+            // TODO(pierremoreau): Same optimisation opportunity as above.
+            inst->RemoveInOperand(i);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 std::vector<ir::Instruction*> DecorationManager::GetDecorationsFor(
@@ -39,91 +68,69 @@ std::vector<const ir::Instruction*> DecorationManager::GetDecorationsFor(
       ->InternalGetDecorationsFor<const ir::Instruction*>(id, include_linkage);
 }
 
+// TODO(pierremoreau): The code will return true for { deco1, deco1 }, { deco1,
+//                     deco2 } when it should return false.
 bool DecorationManager::HaveTheSameDecorations(uint32_t id1,
                                                uint32_t id2) const {
-  using InstructionList = std::vector<const ir::Instruction*>;
-  using DecorationSet = std::set<std::u32string>;
+  const auto decorationsFor1 = GetDecorationsFor(id1, false);
+  const auto decorationsFor2 = GetDecorationsFor(id2, false);
+  if (decorationsFor1.size() != decorationsFor2.size()) return false;
 
-  const InstructionList decorationsFor1 = GetDecorationsFor(id1, false);
-  const InstructionList decorationsFor2 = GetDecorationsFor(id2, false);
-
-  // This function splits the decoration instructions into different sets,
-  // based on their opcode; only OpDecorate, OpDecorateId and OpMemberDecorate
-  // are considered, the other opcodes are ignored.
-  const auto fillDecorationSets =
-      [](const InstructionList& decorationList, DecorationSet* decorateSet,
-         DecorationSet* decorateIdSet, DecorationSet* memberDecorateSet) {
-        for (const ir::Instruction* inst : decorationList) {
-          std::u32string decorationPayload;
-          // Ignore the opcode and the target as we do not want them to be
-          // compared.
-          for (uint32_t i = 1u; i < inst->NumInOperands(); ++i)
-            for (uint32_t word : inst->GetInOperand(i).words)
-              decorationPayload.push_back(word);
-
-          switch (inst->opcode()) {
-            case SpvOpDecorate:
-              decorateSet->emplace(std::move(decorationPayload));
-              break;
-            case SpvOpMemberDecorate:
-              memberDecorateSet->emplace(std::move(decorationPayload));
-              break;
-            case SpvOpDecorateId:
-              decorateIdSet->emplace(std::move(decorationPayload));
-              break;
-            default:
-              break;
-          }
-        }
-      };
-
-  DecorationSet decorateSetFor1;
-  DecorationSet decorateIdSetFor1;
-  DecorationSet memberDecorateSetFor1;
-  fillDecorationSets(decorationsFor1, &decorateSetFor1, &decorateIdSetFor1,
-                     &memberDecorateSetFor1);
-
-  DecorationSet decorateSetFor2;
-  DecorationSet decorateIdSetFor2;
-  DecorationSet memberDecorateSetFor2;
-  fillDecorationSets(decorationsFor2, &decorateSetFor2, &decorateIdSetFor2,
-                     &memberDecorateSetFor2);
-
-  return decorateSetFor1 == decorateSetFor2 &&
-         decorateIdSetFor1 == decorateIdSetFor2 &&
-         memberDecorateSetFor1 == memberDecorateSetFor2;
+  for (const ir::Instruction* inst1 : decorationsFor1) {
+    bool didFindAMatch = false;
+    for (const ir::Instruction* inst2 : decorationsFor2) {
+      if (AreDecorationsTheSame(inst1, inst2)) {
+        didFindAMatch = true;
+        break;
+      }
+    }
+    if (!didFindAMatch) return false;
+  }
+  return true;
 }
 
-// TODO(pierremoreau): If OpDecorateId is referencing an OpConstant, one could
-//                     check that the constants are the same rather than just
-//                     looking at the constant ID.
-bool DecorationManager::AreDecorationsTheSame(const ir::Instruction* inst1,
-                                              const ir::Instruction* inst2,
-                                              bool ignore_target) const {
-  switch (inst1->opcode()) {
-    case SpvOpDecorate:
-    case SpvOpMemberDecorate:
-    case SpvOpDecorateId:
-      break;
-    default:
-      return false;
-  }
-
-  if (inst1->opcode() != inst2->opcode() ||
-      inst1->NumInOperands() != inst2->NumInOperands())
+// TODO(pierremoreau): Handle SpvOpDecorateId by converting them to a regular
+//                     SpvOpDecorate.
+bool DecorationManager::AreDecorationsTheSame(
+    const ir::Instruction* inst1, const ir::Instruction* inst2) const {
+  //  const auto decorateIdToDecorate = [&constants](const Instruction& inst) {
+  //    std::vector<Operand> operands;
+  //    operands.reserve(inst.NumInOperands());
+  //    for (uint32_t i = 2u; i < inst.NumInOperands(); ++i) {
+  //      const auto& j = constants.find(inst.GetSingleWordInOperand(i));
+  //      if (j == constants.end())
+  //        return Instruction();
+  //      const auto operand = j->second->GetOperand(0u);
+  //      operands.emplace_back(operand.type, operand.words);
+  //    }
+  //    return Instruction(SpvOpDecorate, 0u, 0u, operands);
+  //  };
+  //  Instruction tmpA = (deco1.opcode() == SpvOpDecorateId) ?
+  //  decorateIdToDecorate(deco1) : deco1;
+  //  Instruction tmpB = (deco2.opcode() == SpvOpDecorateId) ?
+  //  decorateIdToDecorate(deco2) : deco2;
+  //
+  if (inst1->opcode() == SpvOpDecorateId || inst2->opcode() == SpvOpDecorateId)
     return false;
 
-  for (uint32_t i = ignore_target ? 1u : 0u; i < inst1->NumInOperands(); ++i)
-    if (inst1->GetInOperand(i) != inst2->GetInOperand(i)) return false;
+  ir::Instruction tmpA = *inst1, tmpB = *inst2;
+  if (tmpA.opcode() != tmpB.opcode() ||
+      tmpA.NumInOperands() != tmpB.NumInOperands() ||
+      tmpA.opcode() == SpvOpNop || tmpB.opcode() == SpvOpNop)
+    return false;
+
+  for (uint32_t i = (tmpA.opcode() == SpvOpDecorate) ? 1u : 2u;
+       i < tmpA.NumInOperands(); ++i)
+    if (tmpA.GetInOperand(i) != tmpB.GetInOperand(i)) return false;
 
   return true;
 }
 
-void DecorationManager::AnalyzeDecorations() {
-  if (!module_) return;
+void DecorationManager::AnalyzeDecorations(ir::Module* module) {
+  if (!module) return;
 
   // Collect all group ids.
-  for (const ir::Instruction& inst : module_->annotations()) {
+  for (const ir::Instruction& inst : module->annotations()) {
     switch (inst.opcode()) {
       case SpvOpDecorationGroup:
         group_to_decoration_insts_.insert({inst.result_id(), {}});
@@ -134,45 +141,42 @@ void DecorationManager::AnalyzeDecorations() {
   }
 
   // For each group and instruction, collect all their decoration instructions.
-  for (ir::Instruction& inst : module_->annotations()) {
-    AddDecoration(&inst);
-  }
-}
-void DecorationManager::AddDecoration(ir::Instruction* inst) {
-  switch (inst->opcode()) {
-    case SpvOpDecorate:
-    case SpvOpDecorateId:
-    case SpvOpMemberDecorate: {
-      auto const target_id = inst->GetSingleWordInOperand(0u);
-      auto const group_iter = group_to_decoration_insts_.find(target_id);
-      if (group_iter != group_to_decoration_insts_.end())
-        group_iter->second.push_back(inst);
-      else
-        id_to_decoration_insts_[target_id].push_back(inst);
-      break;
+  for (ir::Instruction& inst : module->annotations()) {
+    switch (inst.opcode()) {
+      case SpvOpDecorate:
+      case SpvOpDecorateId:
+      case SpvOpMemberDecorate: {
+        auto const target_id = inst.GetSingleWordInOperand(0u);
+        auto const group_iter = group_to_decoration_insts_.find(target_id);
+        if (group_iter != group_to_decoration_insts_.end())
+          group_iter->second.push_back(&inst);
+        else
+          id_to_decoration_insts_[target_id].push_back(&inst);
+        break;
+      }
+      case SpvOpGroupDecorate:
+        for (uint32_t i = 1u; i < inst.NumInOperands(); ++i) {
+          auto const target_id = inst.GetSingleWordInOperand(i);
+          auto const group_iter = group_to_decoration_insts_.find(target_id);
+          if (group_iter != group_to_decoration_insts_.end())
+            group_iter->second.push_back(&inst);
+          else
+            id_to_decoration_insts_[target_id].push_back(&inst);
+        }
+        break;
+      case SpvOpGroupMemberDecorate:
+        for (uint32_t i = 1u; i < inst.NumInOperands(); i += 2u) {
+          auto const target_id = inst.GetSingleWordInOperand(i);
+          auto const group_iter = group_to_decoration_insts_.find(target_id);
+          if (group_iter != group_to_decoration_insts_.end())
+            group_iter->second.push_back(&inst);
+          else
+            id_to_decoration_insts_[target_id].push_back(&inst);
+        }
+        break;
+      default:
+        break;
     }
-    case SpvOpGroupDecorate:
-      for (uint32_t i = 1u; i < inst->NumInOperands(); ++i) {
-        auto const target_id = inst->GetSingleWordInOperand(i);
-        auto const group_iter = group_to_decoration_insts_.find(target_id);
-        if (group_iter != group_to_decoration_insts_.end())
-          group_iter->second.push_back(inst);
-        else
-          id_to_decoration_insts_[target_id].push_back(inst);
-      }
-      break;
-    case SpvOpGroupMemberDecorate:
-      for (uint32_t i = 1u; i < inst->NumInOperands(); i += 2u) {
-        auto const target_id = inst->GetSingleWordInOperand(i);
-        auto const group_iter = group_to_decoration_insts_.find(target_id);
-        if (group_iter != group_to_decoration_insts_.end())
-          group_iter->second.push_back(inst);
-        else
-          id_to_decoration_insts_[target_id].push_back(inst);
-      }
-      break;
-    default:
-      break;
   }
 }
 
@@ -225,128 +229,35 @@ std::vector<T> DecorationManager::InternalGetDecorationsFor(
   return decorations;
 }
 
-bool DecorationManager::WhileEachDecoration(
-    uint32_t id, uint32_t decoration,
-    std::function<bool(const ir::Instruction&)> f) {
-  for (const ir::Instruction* inst : GetDecorationsFor(id, true)) {
-    switch (inst->opcode()) {
-      case SpvOpMemberDecorate:
-        if (inst->GetSingleWordInOperand(2) == decoration) {
-          if (!f(*inst)) return false;
-        }
-        break;
-      case SpvOpDecorate:
-      case SpvOpDecorateId:
-        if (inst->GetSingleWordInOperand(1) == decoration) {
-          if (!f(*inst)) return false;
-        }
-        break;
-      default:
-        assert(false && "Unexpected decoration instruction");
-    }
-  }
-  return true;
-}
-
-void DecorationManager::ForEachDecoration(
-    uint32_t id, uint32_t decoration,
-    std::function<void(const ir::Instruction&)> f) {
-  WhileEachDecoration(id, decoration, [&f](const ir::Instruction& inst) {
-    f(inst);
-    return true;
-  });
-}
-
-void DecorationManager::CloneDecorations(
-    uint32_t from, uint32_t to, std::function<void(ir::Instruction&, bool)> f) {
-  assert(f && "Missing function parameter f");
-  auto const decoration_list = id_to_decoration_insts_.find(from);
-  if (decoration_list == id_to_decoration_insts_.end()) return;
-  for (ir::Instruction* inst : decoration_list->second) {
-    switch (inst->opcode()) {
-      case SpvOpGroupDecorate:
-        f(*inst, false);
-        // add |to| to list of decorated id's
-        inst->AddOperand(
-            ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID, {to}));
-        id_to_decoration_insts_[to].push_back(inst);
-        f(*inst, true);
-        break;
-      case SpvOpGroupMemberDecorate: {
-        f(*inst, false);
-        // for each (id == from), add (to, literal) as operands
-        const uint32_t num_operands = inst->NumOperands();
-        for (uint32_t i = 1; i < num_operands; i += 2) {
-          ir::Operand op = inst->GetOperand(i);
-          if (op.words[0] == from) {  // add new pair of operands: (to, literal)
-            inst->AddOperand(
-                ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID, {to}));
-            op = inst->GetOperand(i + 1);
-            inst->AddOperand(std::move(op));
+void DecorationManager::ForEachDecoration(uint32_t id,
+                                          uint32_t decoration,
+                                          std::function<void(const ir::Instruction&)> f) const {
+  auto decoration_list = id_to_decoration_insts_.find(id);
+  if (decoration_list != id_to_decoration_insts_.end()) {
+    for (const ir::Instruction* inst : decoration_list->second) {
+      switch (inst->opcode()) {
+        case SpvOpDecorate:
+          if (inst->GetSingleWordInOperand(1) == decoration) {
+            f(*inst);
           }
-        }
-        id_to_decoration_insts_[to].push_back(inst);
-        f(*inst, true);
-        break;
+          break;
+        case SpvOpMemberDecorate:
+          if (inst->GetSingleWordInOperand(2) == decoration) {
+            f(*inst);
+          }
+          break;
+        case SpvOpDecorateId:
+          if (inst->GetSingleWordInOperand(1) == decoration) {
+            f(*inst);
+          }
+          break;
+        default:
+          assert(false && "Unexpected decoration instruction");
       }
-      case SpvOpDecorate:
-      case SpvOpMemberDecorate:
-      case SpvOpDecorateId: {
-        // simply clone decoration and change |target-id| to |to|
-        std::unique_ptr<ir::Instruction> new_inst(
-            inst->Clone(module_->context()));
-        new_inst->SetInOperand(0, {to});
-        id_to_decoration_insts_[to].push_back(new_inst.get());
-        module_->AddAnnotationInst(std::move(new_inst));
-        auto decoration_iter = --module_->annotation_end();
-        f(*decoration_iter, true);
-        break;
-      }
-      default:
-        assert(false && "Unexpected decoration instruction");
     }
   }
 }
 
-void DecorationManager::RemoveDecoration(ir::Instruction* inst) {
-  switch (inst->opcode()) {
-    case SpvOpDecorate:
-    case SpvOpDecorateId:
-    case SpvOpMemberDecorate: {
-      auto const target_id = inst->GetSingleWordInOperand(0u);
-      RemoveInstructionFromTarget(inst, target_id);
-    } break;
-    case SpvOpGroupDecorate:
-      for (uint32_t i = 1u; i < inst->NumInOperands(); ++i) {
-        auto const target_id = inst->GetSingleWordInOperand(i);
-        RemoveInstructionFromTarget(inst, target_id);
-      }
-      break;
-    case SpvOpGroupMemberDecorate:
-      for (uint32_t i = 1u; i < inst->NumInOperands(); i += 2u) {
-        auto const target_id = inst->GetSingleWordInOperand(i);
-        RemoveInstructionFromTarget(inst, target_id);
-      }
-      break;
-    default:
-      break;
-  }
-}
-
-void DecorationManager::RemoveInstructionFromTarget(ir::Instruction* inst,
-                                                    const uint32_t target_id) {
-  auto const group_iter = group_to_decoration_insts_.find(target_id);
-  if (group_iter != group_to_decoration_insts_.end()) {
-    auto& insts = group_iter->second;
-    insts.erase(std::remove(insts.begin(), insts.end(), inst), insts.end());
-  } else {
-    auto target_list_iter = id_to_decoration_insts_.find(target_id);
-    if (target_list_iter != id_to_decoration_insts_.end()) {
-      auto& insts = target_list_iter->second;
-      insts.erase(std::remove(insts.begin(), insts.end(), inst), insts.end());
-    }
-  }
-}
 }  // namespace analysis
 }  // namespace opt
 }  // namespace spvtools

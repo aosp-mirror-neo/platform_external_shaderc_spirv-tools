@@ -22,10 +22,7 @@
 namespace spvtools {
 
 enum MarkvModelType {
-  kMarkvModelUnknown = 0,
-  kMarkvModelShaderLite,
-  kMarkvModelShaderMid,
-  kMarkvModelShaderMax,
+  kMarkvModelShaderDefault = 1,
 };
 
 std::unique_ptr<MarkvModel> CreateMarkvModel(MarkvModelType type);

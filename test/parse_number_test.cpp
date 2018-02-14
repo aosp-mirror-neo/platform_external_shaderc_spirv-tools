@@ -20,12 +20,12 @@
 #include "spirv-tools/libspirv.h"
 
 namespace {
-using spvutils::EncodeNumberStatus;
 using spvutils::NumberType;
-using spvutils::ParseAndEncodeFloatingPointNumber;
-using spvutils::ParseAndEncodeIntegerNumber;
-using spvutils::ParseAndEncodeNumber;
+using spvutils::EncodeNumberStatus;
 using spvutils::ParseNumber;
+using spvutils::ParseAndEncodeIntegerNumber;
+using spvutils::ParseAndEncodeFloatingPointNumber;
+using spvutils::ParseAndEncodeNumber;
 using testing::Eq;
 using testing::IsNull;
 using testing::NotNull;

@@ -17,6 +17,7 @@
 #ifndef LIBSPIRV_OPT_LOCAL_SINGLE_STORE_ELIM_PASS_H_
 #define LIBSPIRV_OPT_LOCAL_SINGLE_STORE_ELIM_PASS_H_
 
+
 #include <algorithm>
 #include <map>
 #include <queue>
@@ -26,8 +27,8 @@
 
 #include "basic_block.h"
 #include "def_use_manager.h"
-#include "mem_pass.h"
 #include "module.h"
+#include "mem_pass.h"
 
 namespace spvtools {
 namespace opt {
@@ -39,17 +40,11 @@ class LocalSingleStoreElimPass : public MemPass {
  public:
   LocalSingleStoreElimPass();
   const char* name() const override { return "eliminate-local-single-store"; }
-  Status Process(ir::IRContext* irContext) override;
-
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
-  }
+  Status Process(ir::Module*) override;
 
  private:
   // Return true if all refs through |ptrId| are only loads or stores and
-  // cache ptrId in supported_ref_ptrs_. TODO(dnovillo): This function is
-  // replicated in other passes and it's slightly different in every pass. Is it
-  // possible to make one common implementation?
+  // cache ptrId in supported_ref_ptrs_.
   bool HasOnlySupportedRefs(uint32_t ptrId);
 
   // Find all function scope variables in |func| that are stored to
@@ -61,7 +56,7 @@ class LocalSingleStoreElimPass : public MemPass {
   void SingleStoreAnalyze(ir::Function* func);
 
   using GetBlocksFunction =
-      std::function<const std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+    std::function<const std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
 
   /// Returns the block successors function for the augmented CFG.
   GetBlocksFunction AugmentedCFGSuccessorsFunction() const;
@@ -71,13 +66,12 @@ class LocalSingleStoreElimPass : public MemPass {
 
   // Calculate immediate dominators for |func|'s CFG. Leaves result
   // in idom_. Entries for augmented CFG (pseudo blocks) are not created.
-  // TODO(dnovillo): Move to new CFG class.
   void CalculateImmediateDominators(ir::Function* func);
-
+  
   // Return true if instruction in |blk0| at ordinal position |idx0|
   // dominates instruction in |blk1| at position |idx1|.
-  bool Dominates(ir::BasicBlock* blk0, uint32_t idx0, ir::BasicBlock* blk1,
-                 uint32_t idx1);
+  bool Dominates(ir::BasicBlock* blk0, uint32_t idx0,
+    ir::BasicBlock* blk1, uint32_t idx1);
 
   // For each load of an SSA variable in |func|, replace all uses of
   // the load with the value stored if the store dominates the load.
@@ -102,7 +96,7 @@ class LocalSingleStoreElimPass : public MemPass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::IRContext* irContext);
+  void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
   // Map from block's label id to block
@@ -124,21 +118,27 @@ class LocalSingleStoreElimPass : public MemPass {
   // variable directly or through non-ptr access chains.
   std::unordered_set<uint32_t> supported_ref_ptrs_;
 
+  // Augmented CFG Entry Block
+  ir::BasicBlock pseudo_entry_block_;
+
+  // Augmented CFG Exit Block
+  ir::BasicBlock pseudo_exit_block_;
+
   // CFG Predecessors
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
-      predecessors_map_;
+    predecessors_map_;
 
   // CFG Successors
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
-      successors_map_;
+    successors_map_;
 
   // CFG Augmented Predecessors
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
-      augmented_predecessors_map_;
+    augmented_predecessors_map_;
 
   // CFG Augmented Successors
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
-      augmented_successors_map_;
+    augmented_successors_map_;
 
   // Immediate Dominator Map
   // If block has no idom it points to itself.
@@ -152,3 +152,4 @@ class LocalSingleStoreElimPass : public MemPass {
 }  // namespace spvtools
 
 #endif  // LIBSPIRV_OPT_LOCAL_SINGLE_STORE_ELIM_PASS_H_
+

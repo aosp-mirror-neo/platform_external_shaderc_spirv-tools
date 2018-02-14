@@ -37,9 +37,8 @@ TEST_P(OpcodeTableCapabilitiesTest, TableEntryMatchesExpectedCapabilities) {
   spv_opcode_desc entry;
   ASSERT_EQ(SPV_SUCCESS,
             spvOpcodeTableValueLookup(opcodeTable, GetParam().opcode, &entry));
-  EXPECT_EQ(
-      ElementsIn(GetParam().capabilities),
-      ElementsIn(CapabilitySet(entry->numCapabilities, entry->capabilities)));
+  EXPECT_EQ(ElementsIn(GetParam().capabilities),
+            ElementsIn(entry->capabilities));
 }
 
 INSTANTIATE_TEST_CASE_P(

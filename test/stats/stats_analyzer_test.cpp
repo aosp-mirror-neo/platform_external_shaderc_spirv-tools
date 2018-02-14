@@ -14,10 +14,10 @@
 
 // Tests for unique type declaration rules validator.
 
-#include <sstream>
 #include <string>
+#include <sstream>
 
-#include "latest_version_spirv_header.h"
+#include "spirv/1.1/spirv.h"
 #include "test_fixture.h"
 #include "tools/stats/stats_analyzer.h"
 

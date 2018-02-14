@@ -14,7 +14,6 @@
 
 #include "dead_variable_elimination.h"
 
-#include "ir_context.h"
 #include "reflect.h"
 
 namespace spvtools {
@@ -22,18 +21,24 @@ namespace opt {
 
 // This optimization removes global variables that are not needed because they
 // are definitely not accessed.
-Pass::Status DeadVariableElimination::Process(ir::IRContext* c) {
+Pass::Status DeadVariableElimination::Process(spvtools::ir::Module* module) {
   // The algorithm will compute the reference count for every global variable.
   // Anything with a reference count of 0 will then be deleted.  For variables
-  // that might have references that are not explicit in this context, we use
-  // the
+  // that might have references that are not explicit in this module, we use the
   // value kMustKeep as the reference count.
-  InitializeProcessing(c);
+
+  bool modified = false;
+  module_ = module;
+  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
+  FindNamedOrDecoratedIds();
+
+  //  Decoration manager to help organize decorations.
+  analysis::DecorationManager decoration_manager(module);
 
   std::vector<uint32_t> ids_to_remove;
 
   // Get the reference count for all of the global OpVariable instructions.
-  for (auto& inst : context()->types_values()) {
+  for (auto& inst : module->types_values()) {
     if (inst.opcode() != SpvOp::SpvOpVariable) {
       continue;
     }
@@ -43,7 +48,7 @@ Pass::Status DeadVariableElimination::Process(ir::IRContext* c) {
 
     // Check the linkage.  If it is exported, it could be reference somewhere
     // else, so we must keep the variable around.
-    get_decoration_mgr()->ForEachDecoration(
+    decoration_manager.ForEachDecoration(
         result_id, SpvDecorationLinkageAttributes,
         [&count](const ir::Instruction& linkage_instruction) {
           uint32_t last_operand = linkage_instruction.NumOperands() - 1;
@@ -56,14 +61,13 @@ Pass::Status DeadVariableElimination::Process(ir::IRContext* c) {
     if (count != kMustKeep) {
       // If we don't have to keep the instruction for other reasons, then look
       // at the uses and count the number of real references.
-      count = 0;
-      get_def_use_mgr()->ForEachUser(
-          result_id, [&count](ir::Instruction* user) {
-            if (!ir::IsAnnotationInst(user->opcode()) &&
-                user->opcode() != SpvOpName) {
-              ++count;
-            }
-          });
+      if (analysis::UseList* uses = def_use_mgr_->GetUses(result_id)) {
+        count = std::count_if(
+            uses->begin(), uses->end(), [](const analysis::Use& u) {
+              return (!ir::IsAnnotationInst(u.inst->opcode()) &&
+                  u.inst->opcode() != SpvOpName);
+            });
+      }
     }
     reference_count_[result_id] = count;
     if (count == 0) {
@@ -72,7 +76,6 @@ Pass::Status DeadVariableElimination::Process(ir::IRContext* c) {
   }
 
   // Remove all of the variables that have a reference count of 0.
-  bool modified = false;
   if (!ids_to_remove.empty()) {
     modified = true;
     for (auto result_id : ids_to_remove) {
@@ -83,15 +86,15 @@ Pass::Status DeadVariableElimination::Process(ir::IRContext* c) {
 }
 
 void DeadVariableElimination::DeleteVariable(uint32_t result_id) {
-  ir::Instruction* inst = get_def_use_mgr()->GetDef(result_id);
+  ir::Instruction* inst = def_use_mgr_->GetDef(result_id);
   assert(inst->opcode() == SpvOpVariable &&
-         "Should not be trying to delete anything other than an OpVariable.");
+      "Should not be trying to delete anything other than an OpVariable.");
 
   // Look for an initializer that references another variable.  We need to know
   // if that variable can be deleted after the reference is removed.
   if (inst->NumOperands() == 4) {
     ir::Instruction* initializer =
-        get_def_use_mgr()->GetDef(inst->GetSingleWordOperand(3));
+        def_use_mgr_->GetDef(inst->GetSingleWordOperand(3));
 
     // TODO: Handle OpSpecConstantOP which might be defined in terms of other
     // variables.  Will probably require a unified dead code pass that does all
@@ -108,7 +111,8 @@ void DeadVariableElimination::DeleteVariable(uint32_t result_id) {
       }
     }
   }
-  context()->KillDef(result_id);
+  this->KillNamesAndDecorates(result_id);
+  def_use_mgr_->KillDef(result_id);
 }
 }  // namespace opt
 }  // namespace spvtools

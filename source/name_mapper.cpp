@@ -14,8 +14,8 @@
 
 #include "name_mapper.h"
 
-#include <algorithm>
 #include <cassert>
+#include <algorithm>
 #include <iterator>
 #include <sstream>
 #include <string>

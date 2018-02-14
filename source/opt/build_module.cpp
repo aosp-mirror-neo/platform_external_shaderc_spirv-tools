@@ -14,7 +14,6 @@
 
 #include "build_module.h"
 
-#include "ir_context.h"
 #include "ir_loader.h"
 #include "make_unique.h"
 #include "table.h"
@@ -28,8 +27,8 @@ namespace {
 spv_result_t SetSpvHeader(void* builder, spv_endianness_t, uint32_t magic,
                           uint32_t version, uint32_t generator,
                           uint32_t id_bound, uint32_t reserved) {
-  reinterpret_cast<ir::IrLoader*>(builder)->SetModuleHeader(
-      magic, version, generator, id_bound, reserved);
+  reinterpret_cast<ir::IrLoader*>(builder)
+      ->SetModuleHeader(magic, version, generator, id_bound, reserved);
   return SPV_SUCCESS;
 };
 
@@ -42,17 +41,17 @@ spv_result_t SetSpvInst(void* builder, const spv_parsed_instruction_t* inst) {
   return SPV_ERROR_INVALID_BINARY;
 };
 
-}  // namespace
+}  // annoymous namespace
 
-std::unique_ptr<ir::IRContext> BuildModule(spv_target_env env,
-                                           MessageConsumer consumer,
-                                           const uint32_t* binary,
-                                           const size_t size) {
+std::unique_ptr<ir::Module> BuildModule(spv_target_env env,
+                                        MessageConsumer consumer,
+                                        const uint32_t* binary,
+                                        const size_t size) {
   auto context = spvContextCreate(env);
-  libspirv::SetContextMessageConsumer(context, consumer);
+  SetContextMessageConsumer(context, consumer);
 
-  auto irContext = MakeUnique<ir::IRContext>(env, consumer);
-  ir::IrLoader loader(consumer, irContext->module());
+  auto module = MakeUnique<ir::Module>();
+  ir::IrLoader loader(context->consumer, module.get());
 
   spv_result_t status = spvBinaryParse(context, &loader, binary, size,
                                        SetSpvHeader, SetSpvInst, nullptr);
@@ -60,13 +59,13 @@ std::unique_ptr<ir::IRContext> BuildModule(spv_target_env env,
 
   spvContextDestroy(context);
 
-  return status == SPV_SUCCESS ? std::move(irContext) : nullptr;
+  return status == SPV_SUCCESS ? std::move(module) : nullptr;
 }
 
-std::unique_ptr<ir::IRContext> BuildModule(spv_target_env env,
-                                           MessageConsumer consumer,
-                                           const std::string& text,
-                                           uint32_t assemble_options) {
+std::unique_ptr<ir::Module> BuildModule(spv_target_env env,
+                                        MessageConsumer consumer,
+                                        const std::string& text,
+                                        uint32_t assemble_options) {
   SpirvTools t(env);
   t.SetMessageConsumer(consumer);
   std::vector<uint32_t> binary;

@@ -19,32 +19,32 @@
 #include <unordered_set>
 
 #include "def_use_manager.h"
-#include "ir_context.h"
 #include "log.h"
 #include "reflect.h"
 
 namespace spvtools {
 namespace opt {
 
-Pass::Status EliminateDeadConstantPass::Process(ir::IRContext* irContext) {
+Pass::Status EliminateDeadConstantPass::Process(ir::Module* module) {
+  analysis::DefUseManager def_use(consumer(), module);
   std::unordered_set<ir::Instruction*> working_list;
   // Traverse all the instructions to get the initial set of dead constants as
   // working list and count number of real uses for constants. Uses in
   // annotation instructions do not count.
   std::unordered_map<ir::Instruction*, size_t> use_counts;
-  std::vector<ir::Instruction*> constants = irContext->GetConstants();
+  std::vector<ir::Instruction*> constants = module->GetConstants();
   for (auto* c : constants) {
     uint32_t const_id = c->result_id();
     size_t count = 0;
-    irContext->get_def_use_mgr()->ForEachUse(
-        const_id, [&count](ir::Instruction* user, uint32_t index) {
-          (void)index;
-          SpvOp op = user->opcode();
-          if (!(ir::IsAnnotationInst(op) || ir::IsDebug1Inst(op) ||
-                ir::IsDebug2Inst(op) || ir::IsDebug3Inst(op))) {
-            ++count;
-          }
-        });
+    if (analysis::UseList* uses = def_use.GetUses(const_id)) {
+      count =
+          std::count_if(uses->begin(), uses->end(), [](const analysis::Use& u) {
+            return !(ir::IsAnnotationInst(u.inst->opcode()) ||
+                     ir::IsDebug1Inst(u.inst->opcode()) ||
+                     ir::IsDebug2Inst(u.inst->opcode()) ||
+                     ir::IsDebug3Inst(u.inst->opcode()));
+          });
+    }
     use_counts[c] = count;
     if (!count) {
       working_list.insert(c);
@@ -68,8 +68,7 @@ Pass::Status EliminateDeadConstantPass::Process(ir::IRContext* irContext) {
             continue;
           }
           uint32_t operand_id = inst->GetSingleWordInOperand(i);
-          ir::Instruction* def_inst =
-              irContext->get_def_use_mgr()->GetDef(operand_id);
+          ir::Instruction* def_inst = def_use.GetDef(operand_id);
           // If the use_count does not have any count for the def_inst,
           // def_inst must not be a constant, and should be ignored here.
           if (!use_counts.count(def_inst)) {
@@ -91,9 +90,28 @@ Pass::Status EliminateDeadConstantPass::Process(ir::IRContext* irContext) {
     working_list.erase(inst);
   }
 
+  // Find all annotation and debug instructions that are referencing dead
+  // constants.
+  std::unordered_set<ir::Instruction*> dead_others;
+  for (auto* dc : dead_consts) {
+    if (analysis::UseList* uses = def_use.GetUses(dc->result_id())) {
+      for (const auto& u : *uses) {
+        if (ir::IsAnnotationInst(u.inst->opcode()) ||
+            ir::IsDebug1Inst(u.inst->opcode()) ||
+            ir::IsDebug2Inst(u.inst->opcode()) ||
+            ir::IsDebug3Inst(u.inst->opcode())) {
+          dead_others.insert(u.inst);
+        }
+      }
+    }
+  }
+
   // Turn all dead instructions and uses of them to nop
   for (auto* dc : dead_consts) {
-    irContext->KillDef(dc->result_id());
+    def_use.KillDef(dc->result_id());
+  }
+  for (auto* da : dead_others) {
+    da->ToNop();
   }
   return dead_consts.empty() ? Status::SuccessWithoutChange
                              : Status::SuccessWithChange;

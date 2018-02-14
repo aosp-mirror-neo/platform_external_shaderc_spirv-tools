@@ -14,8 +14,7 @@
 
 #include "print.h"
 
-#if defined(SPIRV_ANDROID) || defined(SPIRV_LINUX) || defined(SPIRV_MAC) || \
-    defined(SPIRV_FREEBSD)
+#if defined(SPIRV_ANDROID) || defined(SPIRV_LINUX) || defined(SPIRV_MAC) || defined(SPIRV_FREEBSD)
 namespace libspirv {
 
 clr::reset::operator const char*() { return "\x1b[0m"; }
@@ -36,7 +35,8 @@ clr::blue::operator const char*() { return "\x1b[34m"; }
 
 namespace libspirv {
 
-static void SetConsoleForegroundColorPrimary(HANDLE hConsole, WORD color) {
+static void SetConsoleForegroundColorPrimary(HANDLE hConsole, WORD color)
+{
   // Get screen buffer information from console handle
   CONSOLE_SCREEN_BUFFER_INFO bufInfo;
   GetConsoleScreenBufferInfo(hConsole, &bufInfo);
@@ -48,61 +48,43 @@ static void SetConsoleForegroundColorPrimary(HANDLE hConsole, WORD color) {
   SetConsoleTextAttribute(hConsole, color);
 }
 
-static void SetConsoleForegroundColor(WORD color) {
+static void SetConsoleForegroundColor(WORD color)
+{
   SetConsoleForegroundColorPrimary(GetStdHandle(STD_OUTPUT_HANDLE), color);
   SetConsoleForegroundColorPrimary(GetStdHandle(STD_ERROR_HANDLE), color);
 }
 
 clr::reset::operator const char*() {
-  if (isPrint) {
-    SetConsoleForegroundColor(0xf);
-    return "";
-  }
-  return "\x1b[0m";
+  SetConsoleForegroundColor(0xf);
+  return "";
 }
 
 clr::grey::operator const char*() {
-  if (isPrint) {
-    SetConsoleForegroundColor(FOREGROUND_INTENSITY);
-    return "";
-  }
-  return "\x1b[1;30m";
+  SetConsoleForegroundColor(FOREGROUND_INTENSITY);
+  return "";
 }
 
 clr::red::operator const char*() {
-  if (isPrint) {
-    SetConsoleForegroundColor(FOREGROUND_RED);
-    return "";
-  }
-  return "\x1b[31m";
+  SetConsoleForegroundColor(FOREGROUND_RED);
+  return "";
 }
 
 clr::green::operator const char*() {
-  if (isPrint) {
-    SetConsoleForegroundColor(FOREGROUND_GREEN);
-    return "";
-  }
-  return "\x1b[32m";
+  SetConsoleForegroundColor(FOREGROUND_GREEN);
+  return "";
 }
 
 clr::yellow::operator const char*() {
-  if (isPrint) {
-    SetConsoleForegroundColor(FOREGROUND_RED | FOREGROUND_GREEN);
-    return "";
-  }
-  return "\x1b[33m";
+  SetConsoleForegroundColor(FOREGROUND_RED | FOREGROUND_GREEN);
+  return "";
 }
 
 clr::blue::operator const char*() {
   // Blue all by itself is hard to see against a black background (the
   // default on command shell), or a medium blue background (the default
   // on PowerShell).  So increase its intensity.
-
-  if (isPrint) {
-    SetConsoleForegroundColor(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-    return "";
-  }
-  return "\x1b[94m";
+  SetConsoleForegroundColor(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+  return "";
 }
 
 }  // namespace libspirv

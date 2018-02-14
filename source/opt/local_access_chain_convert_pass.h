@@ -17,6 +17,7 @@
 #ifndef LIBSPIRV_OPT_LOCAL_ACCESS_CHAIN_CONVERT_PASS_H_
 #define LIBSPIRV_OPT_LOCAL_ACCESS_CHAIN_CONVERT_PASS_H_
 
+
 #include <algorithm>
 #include <map>
 #include <queue>
@@ -26,8 +27,8 @@
 
 #include "basic_block.h"
 #include "def_use_manager.h"
-#include "mem_pass.h"
 #include "module.h"
+#include "mem_pass.h"
 
 namespace spvtools {
 namespace opt {
@@ -37,19 +38,13 @@ class LocalAccessChainConvertPass : public MemPass {
  public:
   LocalAccessChainConvertPass();
   const char* name() const override { return "convert-local-access-chains"; }
-  Status Process(ir::IRContext* c) override;
-
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
-  }
+  Status Process(ir::Module*) override;
 
   using ProcessFunction = std::function<bool(ir::Function*)>;
 
  private:
   // Return true if all refs through |ptrId| are only loads or stores and
-  // cache ptrId in supported_ref_ptrs_. TODO(dnovillo): This function is
-  // replicated in other passes and it's slightly different in every pass. Is it
-  // possible to make one common implementation?
+  // cache ptrId in supported_ref_ptrs_.
   bool HasOnlySupportedRefs(uint32_t ptrId);
 
   // Search |func| and cache function scope variables of target type that are
@@ -57,42 +52,46 @@ class LocalAccessChainConvertPass : public MemPass {
   // variables.
   void FindTargetVars(ir::Function* func);
 
+  // Delete |inst| if it has no uses. Assumes |inst| has a non-zero resultId.
+  void DeleteIfUseless(ir::Instruction* inst);
+
+  // Return type id for |ptrInst|'s pointee
+  uint32_t GetPointeeTypeId(const ir::Instruction* ptrInst) const;
+
   // Build instruction from |opcode|, |typeId|, |resultId|, and |in_opnds|.
   // Append to |newInsts|.
-  void BuildAndAppendInst(
-      SpvOp opcode, uint32_t typeId, uint32_t resultId,
-      const std::vector<ir::Operand>& in_opnds,
-      std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
+  void BuildAndAppendInst(SpvOp opcode, uint32_t typeId, uint32_t resultId,
+    const std::vector<ir::Operand>& in_opnds,
+    std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
 
   // Build load of variable in |ptrInst| and append to |newInsts|.
   // Return var in |varId| and its pointee type in |varPteTypeId|.
-  uint32_t BuildAndAppendVarLoad(
-      const ir::Instruction* ptrInst, uint32_t* varId, uint32_t* varPteTypeId,
-      std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
+  uint32_t BuildAndAppendVarLoad(const ir::Instruction* ptrInst,
+    uint32_t* varId, uint32_t* varPteTypeId,
+    std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
 
   // Append literal integer operands to |in_opnds| corresponding to constant
   // integer operands from access chain |ptrInst|. Assumes all indices in
   // access chains are OpConstant.
-  void AppendConstantOperands(const ir::Instruction* ptrInst,
-                              std::vector<ir::Operand>* in_opnds);
+  void AppendConstantOperands( const ir::Instruction* ptrInst,
+    std::vector<ir::Operand>* in_opnds);
 
   // Create a load/insert/store equivalent to a store of
   // |valId| through (constant index) access chaing |ptrInst|.
   // Append to |newInsts|.
-  void GenAccessChainStoreReplacement(
-      const ir::Instruction* ptrInst, uint32_t valId,
+  void GenAccessChainStoreReplacement(const ir::Instruction* ptrInst,
+      uint32_t valId,
       std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
 
   // For the (constant index) access chain |ptrInst|, create an
   // equivalent load and extract. Append to |newInsts|.
-  uint32_t GenAccessChainLoadReplacement(
-      const ir::Instruction* ptrInst,
+  uint32_t GenAccessChainLoadReplacement(const ir::Instruction* ptrInst,
       std::vector<std::unique_ptr<ir::Instruction>>* newInsts);
 
   // Return true if all indices of access chain |acp| are OpConstant integers
   bool IsConstantIndexAccessChain(const ir::Instruction* acp) const;
 
-  // Identify all function scope variables of target type which are
+  // Identify all function scope variables of target type which are 
   // accessed only with loads, stores and access chains with constant
   // indices. Convert all loads and stores of such variables into equivalent
   // loads, stores, extracts and inserts. This unifies access to these
@@ -109,7 +108,7 @@ class LocalAccessChainConvertPass : public MemPass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::IRContext* c);
+  void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
   // Variables with only supported references, ie. loads and stores using
@@ -124,3 +123,4 @@ class LocalAccessChainConvertPass : public MemPass {
 }  // namespace spvtools
 
 #endif  // LIBSPIRV_OPT_LOCAL_ACCESS_CHAIN_CONVERT_PASS_H_
+

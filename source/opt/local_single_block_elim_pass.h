@@ -17,17 +17,18 @@
 #ifndef LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
 #define LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
 
+
 #include <algorithm>
 #include <map>
 #include <queue>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
-#include <utility>
 
 #include "basic_block.h"
 #include "def_use_manager.h"
-#include "mem_pass.h"
 #include "module.h"
+#include "mem_pass.h"
 
 namespace spvtools {
 namespace opt {
@@ -37,18 +38,11 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
  public:
   LocalSingleBlockLoadStoreElimPass();
   const char* name() const override { return "eliminate-local-single-block"; }
-  Status Process(ir::IRContext* c) override;
-
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
-  }
+  Status Process(ir::Module*) override;
 
  private:
   // Return true if all uses of |varId| are only through supported reference
-  // operations ie. loads and store. Also cache in supported_ref_ptrs_.
-  // TODO(dnovillo): This function is replicated in other passes and it's
-  // slightly different in every pass. Is it possible to make one common
-  // implementation?
+  // operations ie. loads and store. Also cache in supported_ref_ptrs_;
   bool HasOnlySupportedRefs(uint32_t varId);
 
   // On all entry point functions, within each basic block, eliminate
@@ -65,7 +59,7 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
   // Return true if all extensions in this module are supported by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::IRContext* c);
+  void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
   // Map from function scope variable to a store of that variable in the
@@ -101,3 +95,4 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
 }  // namespace spvtools
 
 #endif  // LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
+

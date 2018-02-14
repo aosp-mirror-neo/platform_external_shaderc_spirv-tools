@@ -19,9 +19,9 @@
 
 #include "spirv/1.1/spirv.h"
 
-#include "extensions.h"
-
 namespace libspirv {
+
+enum class Extension;
 
 // Finds Extension enum corresponding to |str|. Returns false if not found.
 bool GetExtensionFromString(const std::string& str, Extension* extension);

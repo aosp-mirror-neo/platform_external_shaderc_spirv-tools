@@ -17,6 +17,14 @@
 namespace spvtools {
 namespace ir {
 
+InstructionList::~InstructionList() {
+  while (!empty()) {
+    Instruction* inst = &front();
+    inst->RemoveFromList();
+    delete inst;
+  }
+}
+
 InstructionList::iterator InstructionList::iterator::InsertBefore(
     std::vector<std::unique_ptr<Instruction>>&& list) {
   Instruction* first_node = list.front().get();

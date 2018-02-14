@@ -22,7 +22,6 @@
 
 namespace {
 
-using libspirv::SetContextMessageConsumer;
 using libspirv::SpirvStats;
 using spvtest::ScopedContext;
 
@@ -33,7 +32,8 @@ void DiagnosticsMessageHandler(spv_message_level_t level, const char*,
     case SPV_MSG_FATAL:
     case SPV_MSG_INTERNAL_ERROR:
     case SPV_MSG_ERROR:
-      std::cerr << "error: " << position.index << ": " << message << std::endl;
+      std::cerr << "error: " << position.index << ": " << message
+                << std::endl;
       break;
     case SPV_MSG_WARNING:
       std::cout << "warning: " << position.index << ": " << message
@@ -49,12 +49,12 @@ void DiagnosticsMessageHandler(spv_message_level_t level, const char*,
 
 // Calls libspirv::AggregateStats for binary compiled from |code|.
 void CompileAndAggregateStats(const std::string& code, SpirvStats* stats,
-                              spv_target_env env = SPV_ENV_UNIVERSAL_1_1) {
+                    spv_target_env env = SPV_ENV_UNIVERSAL_1_1) {
   ScopedContext ctx(env);
   SetContextMessageConsumer(ctx.context, DiagnosticsMessageHandler);
   spv_binary binary;
-  ASSERT_EQ(SPV_SUCCESS, spvTextToBinary(ctx.context, code.c_str(), code.size(),
-                                         &binary, nullptr));
+  ASSERT_EQ(SPV_SUCCESS, spvTextToBinary(
+      ctx.context, code.c_str(), code.size(), &binary, nullptr));
 
   ASSERT_EQ(SPV_SUCCESS, AggregateStats(*ctx.context, binary->code,
                                         binary->wordCount, nullptr, stats));
@@ -191,8 +191,8 @@ OpCapability Linkage
 OpMemoryModel Logical GLSL450
 )";
 
-  const uint32_t kGeneratorKhronosAssembler = SPV_GENERATOR_KHRONOS_ASSEMBLER
-                                              << 16;
+  const uint32_t kGeneratorKhronosAssembler =
+      SPV_GENERATOR_KHRONOS_ASSEMBLER << 16;
 
   SpirvStats stats;
 
@@ -287,15 +287,15 @@ OpMemoryModel Physical32 OpenCL
   EXPECT_EQ(1u, stats.opcode_markov_hist[0].at(SpvOpExtension).size());
   EXPECT_EQ(
       1u, stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpCapability));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpExtension));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpExtension));
   EXPECT_EQ(
       1u, stats.opcode_markov_hist[0].at(SpvOpExtension).at(SpvOpMemoryModel));
 
   EXPECT_EQ(1u, stats.opcode_markov_hist[1].size());
   EXPECT_EQ(2u, stats.opcode_markov_hist[1].at(SpvOpCapability).size());
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpExtension));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpExtension));
   EXPECT_EQ(
       1u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpMemoryModel));
 
@@ -308,17 +308,18 @@ OpMemoryModel Physical32 OpenCL
   EXPECT_EQ(2u, stats.opcode_markov_hist[0].at(SpvOpTypeInt).size());
   EXPECT_EQ(
       4u, stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpCapability));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpExtension));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpExtension));
   EXPECT_EQ(
       1u, stats.opcode_markov_hist[0].at(SpvOpCapability).at(SpvOpMemoryModel));
   EXPECT_EQ(
       1u, stats.opcode_markov_hist[0].at(SpvOpExtension).at(SpvOpMemoryModel));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[0].at(SpvOpMemoryModel).at(SpvOpTypeInt));
-  EXPECT_EQ(1u, stats.opcode_markov_hist[0].at(SpvOpTypeInt).at(SpvOpTypeInt));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[0].at(SpvOpTypeInt).at(SpvOpTypeFloat));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[0].at(SpvOpMemoryModel).at(SpvOpTypeInt));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[0].at(SpvOpTypeInt).at(SpvOpTypeInt));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[0].at(SpvOpTypeInt).at(SpvOpTypeFloat));
 
   EXPECT_EQ(3u, stats.opcode_markov_hist[1].size());
   EXPECT_EQ(4u, stats.opcode_markov_hist[1].at(SpvOpCapability).size());
@@ -326,16 +327,16 @@ OpMemoryModel Physical32 OpenCL
   EXPECT_EQ(1u, stats.opcode_markov_hist[1].at(SpvOpTypeInt).size());
   EXPECT_EQ(
       2u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpCapability));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpExtension));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpExtension));
   EXPECT_EQ(
       2u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpMemoryModel));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpTypeInt));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[1].at(SpvOpMemoryModel).at(SpvOpTypeInt));
-  EXPECT_EQ(1u,
-            stats.opcode_markov_hist[1].at(SpvOpTypeInt).at(SpvOpTypeFloat));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[1].at(SpvOpCapability).at(SpvOpTypeInt));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[1].at(SpvOpMemoryModel).at(SpvOpTypeInt));
+  EXPECT_EQ(
+      1u, stats.opcode_markov_hist[1].at(SpvOpTypeInt).at(SpvOpTypeFloat));
 }
 
 TEST(AggregateStats, ConstantLiteralsHistogram) {
@@ -469,14 +470,16 @@ OpMemoryModel Logical GLSL450
 
   {
     const std::unordered_map<uint32_t, uint32_t> expected = {
-        {kF32, 3}, {kU32, 2}, {kF32_1, 2}, {kU32_32, 1}};
+      {kF32, 3}, {kU32, 2}, {kF32_1, 2}, {kU32_32, 1}
+    };
     EXPECT_EQ(expected, stats.id_descriptor_hist);
   }
 
   CompileAndAggregateStats(code2, &stats);
   {
     const std::unordered_map<uint32_t, uint32_t> expected = {
-        {kF32, 6}, {kU32, 4}, {kF32_1, 3}, {kF32_3, 1}, {kU32_32, 2}};
+      {kF32, 6}, {kU32, 4}, {kF32_1, 3}, {kF32_3, 1}, {kU32_32, 2}
+    };
     EXPECT_EQ(expected, stats.id_descriptor_hist);
   }
 }

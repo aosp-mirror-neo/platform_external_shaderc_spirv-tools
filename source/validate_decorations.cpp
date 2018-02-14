@@ -165,3 +165,4 @@ spv_result_t ValidateDecorations(ValidationState_t& vstate) {
 }
 
 }  // namespace libspirv
+

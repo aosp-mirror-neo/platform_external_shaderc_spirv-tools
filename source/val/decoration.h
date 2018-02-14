@@ -15,11 +15,8 @@
 #ifndef LIBSPIRV_VAL_DECORATION_H_
 #define LIBSPIRV_VAL_DECORATION_H_
 
-#include <cstdint>
 #include <unordered_map>
 #include <vector>
-
-#include "latest_version_spirv_header.h"
 
 namespace libspirv {
 
@@ -87,3 +84,4 @@ class Decoration {
 }  // namespace libspirv
 
 #endif  /// LIBSPIRV_VAL_DECORATION_H_
+

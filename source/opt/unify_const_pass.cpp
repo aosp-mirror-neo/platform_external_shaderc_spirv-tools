@@ -18,7 +18,6 @@
 #include <utility>
 
 #include "def_use_manager.h"
-#include "ir_context.h"
 #include "make_unique.h"
 
 namespace spvtools {
@@ -103,17 +102,15 @@ class ResultIdTrie {
 };
 }  // anonymous namespace
 
-Pass::Status UnifyConstantPass::Process(ir::IRContext* c) {
-  InitializeProcessing(c);
+Pass::Status UnifyConstantPass::Process(ir::Module* module) {
   bool modified = false;
   ResultIdTrie defined_constants;
+  analysis::DefUseManager def_use_mgr(consumer(), module);
 
-  for( ir::Instruction* next_instruction, *inst = &*(context()->types_values_begin()); inst; inst = next_instruction) {
-    next_instruction = inst->NextNode();
-
+  for (ir::Instruction& inst : module->types_values()) {
     // Do not handle the instruction when there are decorations upon the result
     // id.
-    if (get_def_use_mgr()->GetAnnotations(inst->result_id()).size() != 0) {
+    if (def_use_mgr.GetAnnotations(inst.result_id()).size() != 0) {
       continue;
     }
 
@@ -135,7 +132,7 @@ Pass::Status UnifyConstantPass::Process(ir::IRContext* c) {
     // used in key arrays will be the ids of the unified constants, when
     // processing is up to a descendant. This makes comparing the key array
     // always valid for judging duplication.
-    switch (inst->opcode()) {
+    switch (inst.opcode()) {
       case SpvOp::SpvOpConstantTrue:
       case SpvOp::SpvOpConstantFalse:
       case SpvOp::SpvOpConstant:
@@ -153,12 +150,12 @@ Pass::Status UnifyConstantPass::Process(ir::IRContext* c) {
       // same so are unifiable.
       case SpvOp::SpvOpSpecConstantOp:
       case SpvOp::SpvOpSpecConstantComposite: {
-        uint32_t id = defined_constants.LookupEquivalentResultFor(*inst);
-        if (id != inst->result_id()) {
+        uint32_t id = defined_constants.LookupEquivalentResultFor(inst);
+        if (id != inst.result_id()) {
           // The constant is a duplicated one, use the cached constant to
           // replace the uses of this duplicated one, then turn it to nop.
-          context()->ReplaceAllUsesWith(inst->result_id(), id);
-          context()->KillInst(inst);
+          def_use_mgr.ReplaceAllUsesWith(inst.result_id(), id);
+          def_use_mgr.KillInst(&inst);
           modified = true;
         }
         break;
@@ -170,5 +167,5 @@ Pass::Status UnifyConstantPass::Process(ir::IRContext* c) {
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-}  // namespace opt
+}  // opt
 }  // namespace spvtools

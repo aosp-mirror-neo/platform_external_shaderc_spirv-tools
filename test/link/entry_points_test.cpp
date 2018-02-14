@@ -23,64 +23,40 @@ class EntryPoints : public spvtest::LinkerTest {};
 
 TEST_F(EntryPoints, SameModelDifferentName) {
   const std::string body1 = R"(
-OpEntryPoint GLCompute %3 "foo"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint GLCompute %1 "foo"
 )";
   const std::string body2 = R"(
-OpEntryPoint GLCompute %3 "bar"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint GLCompute %1 "bar"
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary));
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary));
   EXPECT_THAT(GetErrorMessage(), std::string());
 }
 
 TEST_F(EntryPoints, DifferentModelSameName) {
   const std::string body1 = R"(
-OpEntryPoint GLCompute %3 "foo"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint GLCompute %1 "foo"
 )";
   const std::string body2 = R"(
-OpEntryPoint Vertex %3 "foo"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint Vertex %1 "foo"
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary));
+  ASSERT_EQ(SPV_SUCCESS, AssembleAndLink({body1, body2}, &linked_binary));
   EXPECT_THAT(GetErrorMessage(), std::string());
 }
 
 TEST_F(EntryPoints, SameModelAndName) {
   const std::string body1 = R"(
-OpEntryPoint GLCompute %3 "foo"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint GLCompute %1 "foo"
 )";
   const std::string body2 = R"(
-OpEntryPoint GLCompute %3 "foo"
-%1 = OpTypeVoid
-%2 = OpTypeFunction %1
-%3 = OpFunction %1 None %2
-OpFunctionEnd
+OpEntryPoint GLCompute %1 "foo"
 )";
 
   spvtest::Binary linked_binary;
-  EXPECT_EQ(SPV_ERROR_INTERNAL,
+  ASSERT_EQ(SPV_ERROR_INTERNAL,
             AssembleAndLink({body1, body2}, &linked_binary));
   EXPECT_THAT(GetErrorMessage(),
               HasSubstr("The entry point \"foo\", with execution model "

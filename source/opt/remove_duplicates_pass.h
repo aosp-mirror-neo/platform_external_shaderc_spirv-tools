@@ -19,7 +19,6 @@
 
 #include "decoration_manager.h"
 #include "def_use_manager.h"
-#include "ir_context.h"
 #include "module.h"
 #include "pass.h"
 
@@ -33,32 +32,21 @@ using IdDecorationsList =
 class RemoveDuplicatesPass : public Pass {
  public:
   const char* name() const override { return "remove-duplicates"; }
-  Status Process(ir::IRContext*) override;
-  // TODO(pierremoreau): Move this function somewhere else (e.g. pass.h or
-  // within the type manager)
+  Status Process(ir::Module*) override;
   // Returns whether two types are equal, and have the same decorations.
   static bool AreTypesEqual(const ir::Instruction& inst1,
                             const ir::Instruction& inst2,
-                            ir::IRContext* context);
+                            const analysis::DefUseManager& defUseManager,
+                            const analysis::DecorationManager& decoManager);
 
  private:
-  // Remove duplicate capabilities from the module attached to |ir_context|.
-  //
-  // Returns true if the module was modified, false otherwise.
-  bool RemoveDuplicateCapabilities(ir::IRContext* ir_context) const;
-  // Remove duplicate extended instruction imports from the module attached to
-  // |ir_context|.
-  //
-  // Returns true if the module was modified, false otherwise.
-  bool RemoveDuplicatesExtInstImports(ir::IRContext* ir_context) const;
-  // Remove duplicate types from the module attached to |ir_context|.
-  //
-  // Returns true if the module was modified, false otherwise.
-  bool RemoveDuplicateTypes(ir::IRContext* ir_context) const;
-  // Remove duplicate decorations from the module attached to |ir_context|.
-  //
-  // Returns true if the module was modified, false otherwise.
-  bool RemoveDuplicateDecorations(ir::IRContext* ir_context) const;
+  bool RemoveDuplicateCapabilities(ir::Module* module) const;
+  bool RemoveDuplicatesExtInstImports(
+      ir::Module* module, analysis::DefUseManager& defUseManager) const;
+  bool RemoveDuplicateTypes(ir::Module* module,
+                            analysis::DefUseManager& defUseManager,
+                            analysis::DecorationManager& decManager) const;
+  bool RemoveDuplicateDecorations(ir::Module* module) const;
 };
 
 }  // namespace opt

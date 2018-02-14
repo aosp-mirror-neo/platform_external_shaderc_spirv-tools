@@ -72,7 +72,9 @@ class Instruction {
   }
 
   /// Provides direct access to the stored C instruction object.
-  const spv_parsed_instruction_t& c_inst() const { return inst_; }
+  const spv_parsed_instruction_t& c_inst() const {
+    return inst_;
+  }
 
   // Casts the words belonging to the operand under |index| to |T| and returns.
   template <typename T>
@@ -121,6 +123,6 @@ struct hash<libspirv::Instruction> {
     return hash<uint32_t>()(inst.id());
   }
 };
-}  // namespace std
+}  /// namespace std
 
 #endif  // LIBSPIRV_VAL_INSTRUCTION_H_

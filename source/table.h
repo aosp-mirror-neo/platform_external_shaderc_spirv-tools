@@ -15,7 +15,7 @@
 #ifndef LIBSPIRV_TABLE_H_
 #define LIBSPIRV_TABLE_H_
 
-#include "latest_version_spirv_header.h"
+#include "spirv/1.2/spirv.h"
 
 #include "extensions.h"
 #include "message.h"
@@ -24,8 +24,7 @@
 typedef struct spv_opcode_desc_t {
   const char* name;
   const SpvOp opcode;
-  const uint32_t numCapabilities;
-  const SpvCapability* capabilities;
+  const libspirv::CapabilitySet capabilities;
   // operandTypes[0..numTypes-1] describe logical operands for the instruction.
   // The operand types include result id and result-type id, followed by
   // the types of arguments.
@@ -38,14 +37,12 @@ typedef struct spv_opcode_desc_t {
 typedef struct spv_operand_desc_t {
   const char* name;
   const uint32_t value;
-  const uint32_t numCapabilities;
-  const SpvCapability* capabilities;
+  const libspirv::CapabilitySet capabilities;
   // A set of extensions that enable this feature. If empty then this operand
   // value is always enabled, i.e. it's in core. The assembler, binary parser,
   // and disassembler ignore this rule, so you can freely process invalid
   // modules.
-  const uint32_t numExtensions;
-  const libspirv::Extension* extensions;
+  const libspirv::ExtensionSet extensions;
   const spv_operand_type_t operandTypes[16];  // TODO: Smaller/larger?
 } spv_operand_desc_t;
 
@@ -58,8 +55,7 @@ typedef struct spv_operand_desc_group_t {
 typedef struct spv_ext_inst_desc_t {
   const char* name;
   const uint32_t ext_inst;
-  const uint32_t numCapabilities;
-  const SpvCapability* capabilities;
+  const libspirv::CapabilitySet capabilities;
   const spv_operand_type_t operandTypes[16];  // TODO: Smaller/larger?
 } spv_ext_inst_desc_t;
 
@@ -100,12 +96,10 @@ struct spv_context_t {
   spvtools::MessageConsumer consumer;
 };
 
-namespace libspirv {
 // Sets the message consumer to |consumer| in the given |context|. The original
 // message consumer will be overwritten.
 void SetContextMessageConsumer(spv_context context,
                                spvtools::MessageConsumer consumer);
-}  // namespace libspirv
 
 // Populates *table with entries for env.
 spv_result_t spvOpcodeTableGet(spv_opcode_table* table, spv_target_env env);

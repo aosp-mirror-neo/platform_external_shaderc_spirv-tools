@@ -16,6 +16,7 @@
 #define LIBSPIRV_OPT_STRENGTH_REDUCTION_PASS_H_
 
 #include "def_use_manager.h"
+#include "ir_context.h"
 #include "module.h"
 #include "pass.h"
 
@@ -26,15 +27,17 @@ namespace opt {
 class StrengthReductionPass : public Pass {
  public:
   const char* name() const override { return "strength-reduction"; }
-  Status Process(ir::Module*) override;
+  Status Process(ir::IRContext*) override;
 
  private:
   // Replaces multiple by power of 2 with an equivalent bit shift.
   // Returns true if something changed.
   bool ReplaceMultiplyByPowerOf2(ir::BasicBlock::iterator*);
 
-  // Scan the types and constants in the module looking for the the integer types that we are
-  // interested in.  The shift operation needs a small unsigned integer.  We need to find
+  // Scan the types and constants in the module looking for the the integer
+  // types that we are
+  // interested in.  The shift operation needs a small unsigned integer.  We
+  // need to find
   // them or create them.  We do not want duplicates.
   void FindIntTypesAndConstants();
 
@@ -46,13 +49,6 @@ class StrengthReductionPass : public Pass {
   // ones. Returns true if something changed.
   bool ScanFunctions();
 
-  // Will create the type for an unsigned 32-bit integer and return the id.
-  // This functions assumes one does not already exist.
-  uint32_t CreateUint32Type();
-
-  // Def-Uses for the module we are processing
-  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
-
   // Type ids for the types of interest, or 0 if they do not exist.
   uint32_t int32_type_id_;
   uint32_t uint32_type_id_;
@@ -61,12 +57,6 @@ class StrengthReductionPass : public Pass {
   // We set the limit at 32 because a bit shift of a 32-bit integer does not
   // need a value larger than 32.
   uint32_t constant_ids_[33];
-
-  // Next unused ID
-  uint32_t next_id_;
-
-  // The module that the pass is being applied to.
-  ir::Module* module_;
 };
 
 }  // namespace opt

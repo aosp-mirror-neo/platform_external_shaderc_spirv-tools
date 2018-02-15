@@ -24,14 +24,14 @@ using InlineTest = PassTest<::testing::Test>;
 
 TEST_F(InlineTest, Simple) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     return bar.x + bar.y;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = vec4(foo(BaseColor));
@@ -134,23 +134,23 @@ TEST_F(InlineTest, Simple) {
 
 TEST_F(InlineTest, Nested) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo2(float f, float f2)
   // {
   //     return f * f2;
   // }
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     return foo2(bar.x + bar.y, bar.z);
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = vec4(foo(BaseColor));
-  //     gl_FragColor = color; 
+  //     gl_FragColor = color;
   // }
   const std::vector<const char*> predefs = {
       // clang-format off
@@ -284,20 +284,20 @@ TEST_F(InlineTest, Nested) {
 
 TEST_F(InlineTest, InOutParameter) {
   // #version 400
-  // 
+  //
   // in vec4 Basecolor;
-  // 
+  //
   // void foo(inout vec4 bar)
   // {
   //     bar.z = bar.x + bar.y;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 b = Basecolor;
   //     foo(b);
   //     vec4 color = vec4(b.z);
-  //     gl_FragColor = color; 
+  //     gl_FragColor = color;
   // }
   const std::vector<const char*> predefs = {
       // clang-format off
@@ -413,9 +413,9 @@ TEST_F(InlineTest, InOutParameter) {
 
 TEST_F(InlineTest, BranchInCallee) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     float r = bar.x;
@@ -423,12 +423,12 @@ TEST_F(InlineTest, BranchInCallee) {
   //         r = -r;
   //     return r;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = vec4(foo(BaseColor));
-  // 
-  //     gl_FragColor = color; 
+  //
+  //     gl_FragColor = color;
   // }
   const std::vector<const char*> predefs = {
       // clang-format off
@@ -549,9 +549,9 @@ TEST_F(InlineTest, BranchInCallee) {
 
 TEST_F(InlineTest, PhiAfterCall) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(float bar)
   // {
   //     float r = bar;
@@ -559,13 +559,13 @@ TEST_F(InlineTest, PhiAfterCall) {
   //         r = -r;
   //     return r;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = BaseColor;
   //     if (foo(color.x) > 2.0 && foo(color.y) > 2.0)
   //         color = vec4(0.0);
-  //     gl_FragColor = color; 
+  //     gl_FragColor = color;
   // }
   const std::vector<const char*> predefs = {
       // clang-format off
@@ -744,12 +744,12 @@ TEST_F(InlineTest, PhiAfterCall) {
 
 TEST_F(InlineTest, OpSampledImageOutOfBlock) {
   // #version 450
-  // 
+  //
   // uniform texture2D t2D;
   // uniform sampler samp;
   // out vec4 FragColor;
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     float r = bar.x;
@@ -757,13 +757,13 @@ TEST_F(InlineTest, OpSampledImageOutOfBlock) {
   //         r = -r;
   //     return r;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color1 = texture(sampler2D(t2D, samp), vec2(1.0));
   //     vec4 color2 = vec4(foo(BaseColor));
   //     vec4 color3 = texture(sampler2D(t2D, samp), vec2(0.5));
-  //     FragColor = (color1 + color2 + color3)/3; 
+  //     FragColor = (color1 + color2 + color3)/3;
   // }
   //
   // Note: the before SPIR-V will need to be edited to create a use of
@@ -941,15 +941,15 @@ TEST_F(InlineTest, OpSampledImageOutOfBlock) {
 
 TEST_F(InlineTest, OpImageOutOfBlock) {
   // #version 450
-  // 
+  //
   // uniform texture2D t2D;
   // uniform sampler samp;
   // uniform sampler samp2;
-  // 
+  //
   // out vec4 FragColor;
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     float r = bar.x;
@@ -957,13 +957,13 @@ TEST_F(InlineTest, OpImageOutOfBlock) {
   //         r = -r;
   //     return r;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color1 = texture(sampler2D(t2D, samp), vec2(1.0));
   //     vec4 color2 = vec4(foo(BaseColor));
   //     vec4 color3 = texture(sampler2D(t2D, samp2), vec2(0.5));
-  //     FragColor = (color1 + color2 + color3)/3; 
+  //     FragColor = (color1 + color2 + color3)/3;
   // }
   // Note: the before SPIR-V will need to be edited to create an OpImage
   // from the first OpSampledImage, place it before the call and use it
@@ -1147,15 +1147,15 @@ TEST_F(InlineTest, OpImageOutOfBlock) {
 
 TEST_F(InlineTest, OpImageAndOpSampledImageOutOfBlock) {
   // #version 450
-  // 
+  //
   // uniform texture2D t2D;
   // uniform sampler samp;
   // uniform sampler samp2;
-  // 
+  //
   // out vec4 FragColor;
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     float r = bar.x;
@@ -1163,13 +1163,13 @@ TEST_F(InlineTest, OpImageAndOpSampledImageOutOfBlock) {
   //         r = -r;
   //     return r;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color1 = texture(sampler2D(t2D, samp), vec2(1.0));
   //     vec4 color2 = vec4(foo(BaseColor));
   //     vec4 color3 = texture(sampler2D(t2D, samp2), vec2(0.5));
-  //     FragColor = (color1 + color2 + color3)/3; 
+  //     FragColor = (color1 + color2 + color3)/3;
   // }
   // Note: the before SPIR-V will need to be edited to create an OpImage
   // and subsequent OpSampledImage that is used across the function call.
@@ -1353,20 +1353,20 @@ TEST_F(InlineTest, OpImageAndOpSampledImageOutOfBlock) {
 
 TEST_F(InlineTest, EarlyReturnFunctionInlined) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     if (bar.x < 0.0)
   //         return 0.0;
   //     return bar.x;
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = vec4(foo(BaseColor));
-  //     gl_FragColor = color; 
+  //     gl_FragColor = color;
   // }
 
   const std::string predefs =
@@ -1474,8 +1474,8 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::InlineExhaustivePass>(
-      predefs + before + nonEntryFuncs, 
-      predefs + after + nonEntryFuncs, false, true);
+      predefs + before + nonEntryFuncs, predefs + after + nonEntryFuncs, false,
+      true);
 }
 
 TEST_F(InlineTest, EarlyReturnNotAppearingLastInFunctionInlined) {
@@ -1530,7 +1530,7 @@ OpFunctionEnd
 )";
 
   const std::string after =
-R"(%main = OpFunction %void None %4
+      R"(%main = OpFunction %void None %4
 %10 = OpLabel
 OpSelectionMerge %12 None
 OpBranchConditional %true %13 %12
@@ -1544,25 +1544,25 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::InlineExhaustivePass>(
-      predefs + nonEntryFuncs + before,
-      predefs + nonEntryFuncs + after, false, true);
+      predefs + nonEntryFuncs + before, predefs + nonEntryFuncs + after, false,
+      true);
 }
 
 TEST_F(InlineTest, ForwardReferencesInPhiInlined) {
   // The basic structure of the test case is like this:
-  // 
+  //
   // int foo() {
   //   int result = 1;
   //   if (true) {
   //      result = 1;
-  //   } 
+  //   }
   //   return result;
-  // }   
-  // 
+  // }
+  //
   // void main() {
   //  int x = foo();
   // }
-  // 
+  //
   // but with modifications: Using Phi instead of load/store, and the
   // return block in foo appears before the "then" block.
 
@@ -1611,7 +1611,7 @@ OpFunctionEnd
 )";
 
   const std::string after =
-R"(%main = OpFunction %void None %6
+      R"(%main = OpFunction %void None %6
 %19 = OpLabel
 %21 = OpVariable %_ptr_Function_int Function
 %x = OpVariable %_ptr_Function_int Function
@@ -1633,15 +1633,15 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::InlineExhaustivePass>(
-      predefs + nonEntryFuncs + before,
-      predefs + nonEntryFuncs + after, false, true);
+      predefs + nonEntryFuncs + before, predefs + nonEntryFuncs + after, false,
+      true);
 }
 
 TEST_F(InlineTest, EarlyReturnInLoopIsNotInlined) {
   // #version 140
-  // 
+  //
   // in vec4 BaseColor;
-  // 
+  //
   // float foo(vec4 bar)
   // {
   //     while (true) {
@@ -1650,11 +1650,11 @@ TEST_F(InlineTest, EarlyReturnInLoopIsNotInlined) {
   //         return bar.x;
   //     }
   // }
-  // 
+  //
   // void main()
   // {
   //     vec4 color = vec4(foo(BaseColor));
-  //     gl_FragColor = color; 
+  //     gl_FragColor = color;
   // }
 
   const std::string assembly =
@@ -1729,8 +1729,8 @@ OpReturnValue %41
 OpFunctionEnd
 )";
 
-  SinglePassRunAndCheck<opt::InlineExhaustivePass>(
-      assembly, assembly, false, true);
+  SinglePassRunAndCheck<opt::InlineExhaustivePass>(assembly, assembly, false,
+                                                   true);
 }
 
 TEST_F(InlineTest, ExternalFunctionIsNotInlined) {
@@ -1754,8 +1754,8 @@ OpReturn
 OpFunctionEnd
 )";
 
-  SinglePassRunAndCheck<opt::InlineExhaustivePass>(
-      assembly, assembly, false, true);
+  SinglePassRunAndCheck<opt::InlineExhaustivePass>(assembly, assembly, false,
+                                                   true);
 }
 
 TEST_F(InlineTest, SingleBlockLoopCallsMultiBlockCallee) {
@@ -1997,12 +1997,13 @@ OpFunctionEnd
       true);
 }
 
-TEST_F(InlineTest, MultiBlockLoopHeaderCallsFromToMultiBlockCalleeHavingSelectionMerge) {
+TEST_F(InlineTest,
+       MultiBlockLoopHeaderCallsFromToMultiBlockCalleeHavingSelectionMerge) {
   // This is similar to SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMerge
   // but the call is in the header block of a multi block loop.
 
   const std::string predefs =
-R"(OpCapability Shader
+      R"(OpCapability Shader
 OpMemoryModel Logical GLSL450
 OpEntryPoint GLCompute %1 "main"
 OpSource OpenCL_C 120
@@ -2019,7 +2020,7 @@ OpSource OpenCL_C 120
 )";
 
   const std::string nonEntryFuncs =
-  R"(%12 = OpFunction %void None %11
+      R"(%12 = OpFunction %void None %11
 %13 = OpLabel
 %14 = OpCopyObject %int %int_1
 OpSelectionMerge %15 None
@@ -2077,7 +2078,9 @@ OpFunctionEnd
       true);
 }
 
-TEST_F(InlineTest, SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMergeAndMultiReturns) {
+TEST_F(
+    InlineTest,
+    SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMergeAndMultiReturns) {
   // This is similar to SingleBlockLoopCallsMultiBlockCalleeHavingSelectionMerge
   // except that in addition to starting with a selection header, the
   // callee also has multi returns.
@@ -2248,6 +2251,341 @@ OpFunctionEnd
       true);
 }
 
+TEST_F(InlineTest, Decorated1) {
+  // Same test as Simple with the difference
+  // that OpFAdd in the outlined function is
+  // decorated with RelaxedPrecision
+  // Expected result is an equal decoration
+  // of the corresponding inlined instruction
+  //
+  // #version 140
+  //
+  // in vec4 BaseColor;
+  //
+  // float foo(vec4 bar)
+  // {
+  //     return bar.x + bar.y;
+  // }
+  //
+  // void main()
+  // {
+  //     vec4 color = vec4(foo(BaseColor));
+  //     gl_FragColor = color;
+  // }
+
+  const std::string predefs =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %gl_FragColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %foo_vf4_ "foo(vf4;"
+OpName %bar "bar"
+OpName %color "color"
+OpName %BaseColor "BaseColor"
+OpName %param "param"
+OpName %gl_FragColor "gl_FragColor"
+OpDecorate %9 RelaxedPrecision
+)";
+
+  const std::string before =
+      R"(%void = OpTypeVoid
+%11 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%15 = OpTypeFunction %float %_ptr_Function_v4float
+%uint = OpTypeInt 32 0
+%uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+%uint_1 = OpConstant %uint 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %11
+%22 = OpLabel
+%color = OpVariable %_ptr_Function_v4float Function
+%param = OpVariable %_ptr_Function_v4float Function
+%23 = OpLoad %v4float %BaseColor
+OpStore %param %23
+%24 = OpFunctionCall %float %foo_vf4_ %param
+%25 = OpCompositeConstruct %v4float %24 %24 %24 %24
+OpStore %color %25
+%26 = OpLoad %v4float %color
+OpStore %gl_FragColor %26
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(OpDecorate %37 RelaxedPrecision
+%void = OpTypeVoid
+%11 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%15 = OpTypeFunction %float %_ptr_Function_v4float
+%uint = OpTypeInt 32 0
+%uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+%uint_1 = OpConstant %uint 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %11
+%22 = OpLabel
+%32 = OpVariable %_ptr_Function_float Function
+%color = OpVariable %_ptr_Function_v4float Function
+%param = OpVariable %_ptr_Function_v4float Function
+%23 = OpLoad %v4float %BaseColor
+OpStore %param %23
+%33 = OpAccessChain %_ptr_Function_float %param %uint_0
+%34 = OpLoad %float %33
+%35 = OpAccessChain %_ptr_Function_float %param %uint_1
+%36 = OpLoad %float %35
+%37 = OpFAdd %float %34 %36
+OpStore %32 %37
+%24 = OpLoad %float %32
+%25 = OpCompositeConstruct %v4float %24 %24 %24 %24
+OpStore %color %25
+%26 = OpLoad %v4float %color
+OpStore %gl_FragColor %26
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string nonEntryFuncs =
+      R"(%foo_vf4_ = OpFunction %float None %15
+%bar = OpFunctionParameter %_ptr_Function_v4float
+%27 = OpLabel
+%28 = OpAccessChain %_ptr_Function_float %bar %uint_0
+%29 = OpLoad %float %28
+%30 = OpAccessChain %_ptr_Function_float %bar %uint_1
+%31 = OpLoad %float %30
+%9 = OpFAdd %float %29 %31
+OpReturnValue %9
+OpFunctionEnd
+)";
+  SinglePassRunAndCheck<opt::InlineExhaustivePass>(
+      predefs + before + nonEntryFuncs, predefs + after + nonEntryFuncs, false,
+      true);
+}
+
+TEST_F(InlineTest, Decorated2) {
+  // Same test as Simple with the difference
+  // that the Result <id> of the outlined OpFunction
+  // is decorated with RelaxedPrecision
+  // Expected result is an equal decoration
+  // of the created return variable
+  //
+  // #version 140
+  //
+  // in vec4 BaseColor;
+  //
+  // float foo(vec4 bar)
+  // {
+  //     return bar.x + bar.y;
+  // }
+  //
+  // void main()
+  // {
+  //     vec4 color = vec4(foo(BaseColor));
+  //     gl_FragColor = color;
+  // }
+
+  const std::string predefs =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %gl_FragColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %foo_vf4_ "foo(vf4;"
+OpName %bar "bar"
+OpName %color "color"
+OpName %BaseColor "BaseColor"
+OpName %param "param"
+OpName %gl_FragColor "gl_FragColor"
+OpDecorate %foo_vf4_ RelaxedPrecision
+)";
+
+  const std::string before =
+      R"(%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%14 = OpTypeFunction %float %_ptr_Function_v4float
+%uint = OpTypeInt 32 0
+%uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+%uint_1 = OpConstant %uint 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %10
+%21 = OpLabel
+%color = OpVariable %_ptr_Function_v4float Function
+%param = OpVariable %_ptr_Function_v4float Function
+%22 = OpLoad %v4float %BaseColor
+OpStore %param %22
+%23 = OpFunctionCall %float %foo_vf4_ %param
+%24 = OpCompositeConstruct %v4float %23 %23 %23 %23
+OpStore %color %24
+%25 = OpLoad %v4float %color
+OpStore %gl_FragColor %25
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(OpDecorate %32 RelaxedPrecision
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%14 = OpTypeFunction %float %_ptr_Function_v4float
+%uint = OpTypeInt 32 0
+%uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+%uint_1 = OpConstant %uint 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %10
+%21 = OpLabel
+%32 = OpVariable %_ptr_Function_float Function
+%color = OpVariable %_ptr_Function_v4float Function
+%param = OpVariable %_ptr_Function_v4float Function
+%22 = OpLoad %v4float %BaseColor
+OpStore %param %22
+%33 = OpAccessChain %_ptr_Function_float %param %uint_0
+%34 = OpLoad %float %33
+%35 = OpAccessChain %_ptr_Function_float %param %uint_1
+%36 = OpLoad %float %35
+%37 = OpFAdd %float %34 %36
+OpStore %32 %37
+%23 = OpLoad %float %32
+%24 = OpCompositeConstruct %v4float %23 %23 %23 %23
+OpStore %color %24
+%25 = OpLoad %v4float %color
+OpStore %gl_FragColor %25
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string nonEntryFuncs =
+      R"(%foo_vf4_ = OpFunction %float None %14
+%bar = OpFunctionParameter %_ptr_Function_v4float
+%26 = OpLabel
+%27 = OpAccessChain %_ptr_Function_float %bar %uint_0
+%28 = OpLoad %float %27
+%29 = OpAccessChain %_ptr_Function_float %bar %uint_1
+%30 = OpLoad %float %29
+%31 = OpFAdd %float %28 %30
+OpReturnValue %31
+OpFunctionEnd
+)";
+  SinglePassRunAndCheck<opt::InlineExhaustivePass>(
+      predefs + before + nonEntryFuncs, predefs + after + nonEntryFuncs, false,
+      true);
+}
+
+TEST_F(InlineTest, DeleteName) {
+  // Test that the name of the result id of the call is deleted.
+  const std::string before =
+      R"(
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main"
+               OpName %main "main"
+               OpName %main_entry "main_entry"
+               OpName %foo_result "foo_result"
+               OpName %void_fn "void_fn"
+               OpName %foo "foo"
+               OpName %foo_entry "foo_entry"
+       %void = OpTypeVoid
+    %void_fn = OpTypeFunction %void
+        %foo = OpFunction %void None %void_fn
+  %foo_entry = OpLabel
+               OpReturn
+               OpFunctionEnd
+       %main = OpFunction %void None %void_fn
+ %main_entry = OpLabel
+ %foo_result = OpFunctionCall %void %foo
+               OpReturn
+               OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Vertex %main "main"
+OpName %main "main"
+OpName %main_entry "main_entry"
+OpName %void_fn "void_fn"
+OpName %foo "foo"
+OpName %foo_entry "foo_entry"
+%void = OpTypeVoid
+%void_fn = OpTypeFunction %void
+%foo = OpFunction %void None %void_fn
+%foo_entry = OpLabel
+OpReturn
+OpFunctionEnd
+%main = OpFunction %void None %void_fn
+%main_entry = OpLabel
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::InlineExhaustivePass>(before, after, false, true);
+}
+
+TEST_F(InlineTest, SetParent) {
+  // Test that after inlining all basic blocks have the correct parent.
+  const std::string text =
+      R"(
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main"
+               OpName %main "main"
+               OpName %main_entry "main_entry"
+               OpName %foo_result "foo_result"
+               OpName %void_fn "void_fn"
+               OpName %foo "foo"
+               OpName %foo_entry "foo_entry"
+       %void = OpTypeVoid
+    %void_fn = OpTypeFunction %void
+        %foo = OpFunction %void None %void_fn
+  %foo_entry = OpLabel
+               OpReturn
+               OpFunctionEnd
+       %main = OpFunction %void None %void_fn
+ %main_entry = OpLabel
+ %foo_result = OpFunctionCall %void %foo
+               OpReturn
+               OpFunctionEnd
+)";
+
+  std::unique_ptr<ir::IRContext> context =
+      BuildModule(SPV_ENV_UNIVERSAL_1_2, nullptr, text);
+  opt::InlineExhaustivePass pass;
+  pass.Run(context.get());
+
+  for (ir::Function& func : *context->module()) {
+    for (ir::BasicBlock& bb : func) {
+      EXPECT_TRUE(bb.GetParent() == &func);
+    }
+  }
+}
 
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
 //

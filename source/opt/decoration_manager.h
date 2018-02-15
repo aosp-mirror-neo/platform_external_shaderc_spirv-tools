@@ -30,10 +30,17 @@ namespace analysis {
 class DecorationManager {
  public:
   // Constructs a decoration manager from the given |module|
-  DecorationManager(ir::Module* module) { AnalyzeDecorations(module); }
-  // Removes all decorations from |id|, which should not be a group ID, except
-  // for linkage decorations if |keep_linkage| is set.
-  void RemoveDecorationsFrom(uint32_t id, bool keep_linkage);
+  explicit DecorationManager(ir::Module* module) : module_(module) {
+    AnalyzeDecorations();
+  }
+  DecorationManager() = delete;
+
+  // Removes all decorations from |id|, which should not be a group ID.
+  void RemoveDecorationsFrom(uint32_t id);
+
+  // Removes all decorations from the result id of |inst|.
+  void RemoveDecoration(ir::Instruction* inst);
+
   // Returns a vector of all decorations affecting |id|. If a group is applied
   // to |id|, the decorations of that group are returned rather than the group
   // decoration instruction. If |include_linkage| is not set, linkage
@@ -46,22 +53,52 @@ class DecorationManager {
   // instructions that apply the same decorations but to different IDs, still
   // count as being the same.
   bool HaveTheSameDecorations(uint32_t id1, uint32_t id2) const;
-  // Returns whether two decorations are the same. SpvOpDecorateId is currently
-  // not handled and will return false no matter what.
+  // Returns whether the two decorations instructions are the same and are
+  // applying the same decorations; unless |ignore_target| is false, the targets
+  // to which they are applied to does not matter, except for the member part.
+  //
+  // This is only valid for OpDecorate, OpMemberDecorate and OpDecorateId; it
+  // will return false for other opcodes.
   bool AreDecorationsTheSame(const ir::Instruction* inst1,
-                             const ir::Instruction* inst2) const;
+                             const ir::Instruction* inst2,
+                             bool ignore_target) const;
 
   // |f| is run on each decoration instruction for |id| with decoration
-  // |decoration|.
+  // |decoration|. Processed are all decorations which target |id| either
+  // directly or indirectly by Decoration Groups.
   void ForEachDecoration(uint32_t id, uint32_t decoration,
-                         std::function<void(const ir::Instruction& f)>) const;
+                         std::function<void(const ir::Instruction&)> f);
+
+  // |f| is run on each decoration instruction for |id| with decoration
+  // |decoration|. Processes all decoration which target |id| either directly or
+  // indirectly through decoration groups. If |f| returns false, iteration is
+  // terminated and this function returns false.
+  bool WhileEachDecoration(uint32_t id, uint32_t decoration,
+                           std::function<bool(const ir::Instruction&)> f);
+
+  // Clone all decorations from one id |from|.
+  // The cloned decorations are assigned to the given id |to| and are
+  // added to the module. The purpose is to decorate cloned instructions.
+  // This function does not check if the id |to| is already decorated.
+  // Function |f| can be used to update context information and is called
+  // with |false|, before an instruction is going to be changed and
+  // with |true| afterwards.
+  void CloneDecorations(uint32_t from, uint32_t to,
+                        std::function<void(ir::Instruction&, bool)> f);
+
+  // Informs the decoration manager of a new decoration that it needs to track.
+  void AddDecoration(ir::Instruction* inst);
 
  private:
+  // Removes the instruction from the set of decorations targeting |target_id|.
+  void RemoveInstructionFromTarget(ir::Instruction* inst,
+                                   const uint32_t target_id);
+
   using IdToDecorationInstsMap =
       std::unordered_map<uint32_t, std::vector<ir::Instruction*>>;
   // Analyzes the defs and uses in the given |module| and populates data
   // structures in this class. Does nothing if |module| is nullptr.
-  void AnalyzeDecorations(ir::Module* module);
+  void AnalyzeDecorations();
 
   template <typename T>
   std::vector<T> InternalGetDecorationsFor(uint32_t id, bool include_linkage);
@@ -74,6 +111,8 @@ class DecorationManager {
   IdToDecorationInstsMap id_to_decoration_insts_;
   // Mapping from group ids to all the decoration instructions they apply.
   IdToDecorationInstsMap group_to_decoration_insts_;
+  // The enclosing module.
+  ir::Module* module_;
 };
 
 }  // namespace analysis

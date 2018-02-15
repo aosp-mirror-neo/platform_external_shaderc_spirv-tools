@@ -463,6 +463,11 @@ Optimizer::PassToken CreateMergeReturnPass();
 // same value, and remove the redundant ones.
 Optimizer::PassToken CreateLocalRedundancyEliminationPass();
 
+// Create LICM pass.
+// This pass will look for invariant instructions inside loops and hoist them to
+// the loops preheader.
+Optimizer::PassToken CreateLoopInvariantCodeMotionPass();
+
 // Create global value numbering pass.
 // This pass will look for instructions where the same value is computed on all
 // paths leading to the instruction.  Those instructions are deleted.
@@ -503,6 +508,17 @@ Optimizer::PassToken CreateIfConversionPass();
 // Creates a pass that will replace instructions that are not valid for the
 // current shader stage by constants.  Has no effect on non-shader modules.
 Optimizer::PassToken CreateReplaceInvalidOpcodePass();
+
+// Creates a pass that simplifies instructions using the instruction folder.
+Optimizer::PassToken CreateSimplificationPass();
+
+// Create loop unroller pass.
+// Creates a pass to fully unroll loops which have the "Unroll" loop control
+// mask set. The loops must meet a specific criteria in order to be unrolled
+// safely this criteria is checked before doing the unroll by the
+// LoopUtils::CanPerformUnroll method. Any loop that does not meet the criteria
+// won't be unrolled. See CanPerformUnroll LoopUtils.h for more information.
+Optimizer::PassToken CreateLoopFullyUnrollPass();
 
 }  // namespace spvtools
 

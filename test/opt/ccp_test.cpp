@@ -458,14 +458,15 @@ TEST_F(CCPTest, SSAWebCycles) {
          %22 = OpIAdd %int %29 %30
                OpBranch %14
          %14 = OpLabel
-; CHECK: OpPhi %int %int_0 {{%\d+}} %int_0 {{%\d+}}
-         %25 = OpPhi %int %int_0 %5 %30 %14
+; CHECK: OpPhi %int %int_0 {{%\d+}}
+         %25 = OpPhi %int %30 %12
                OpBranch %11
          %13 = OpLabel
                OpReturn
                OpFunctionEnd
   )";
 
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<opt::CCPPass>(spv_asm, true);
 }
 
@@ -675,6 +676,216 @@ TEST_F(CCPTest, UndefInPhi) {
          %17 = OpIAdd %uint %16 %uint_1
                OpReturn
                OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+// Just test to make sure the constant fold rules are being used.  Will rely on
+// the folding test for specific testing of specific rules.
+TEST_F(CCPTest, UseConstantFoldingRules) {
+  const std::string text = R"(
+; CHECK: [[float1:%\w+]] = OpConstant {{%\w+}} 1
+; CHECK: OpReturnValue [[float1]]
+               OpCapability Shader
+               OpCapability Linkage
+               OpMemoryModel Logical GLSL450
+               OpDecorate %1 LinkageAttributes "func" Export
+       %void = OpTypeVoid
+       %bool = OpTypeBool
+      %float = OpTypeFloat 32
+    %float_0 = OpConstant %float 0
+    %float_1 = OpConstant %float 1
+          %8 = OpTypeFunction %float
+          %1 = OpFunction %float None %8
+         %10 = OpLabel
+         %17 = OpFAdd %float %float_0 %float_1
+               OpReturnValue %17
+               OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+// Test for #1300. Previously value for %5 would not settle during simulation.
+TEST_F(CCPTest, SettlePhiLatticeValue) {
+  const std::string text = R"(
+OpCapability Kernel
+OpCapability Linkage
+OpMemoryModel Logical OpenCL
+OpDecorate %func LinkageAttributes "func" Export
+%void = OpTypeVoid
+%bool = OpTypeBool
+%true = OpConstantTrue %bool
+%false = OpConstantFalse %bool
+%functy = OpTypeFunction %void
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpBranchConditional %true %2 %3
+%3 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%5 = OpPhi %bool %true %1 %false %3
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunToBinary<opt::CCPPass>(text, true);
+}
+
+TEST_F(CCPTest, NullBranchCondition) {
+  const std::string text = R"(
+; CHECK: [[int1:%\w+]] = OpConstant {{%\w+}} 1
+; CHECK: [[int2:%\w+]] = OpConstant {{%\w+}} 2
+; CHECK: OpIAdd {{%\w+}} [[int1]] [[int2]]
+OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %func "func"
+%void = OpTypeVoid
+%bool = OpTypeBool
+%int = OpTypeInt 32 1
+%null = OpConstantNull %bool
+%int_1 = OpConstant %int 1
+%int_2 = OpConstant %int 2
+%functy = OpTypeFunction %void
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpSelectionMerge %2 None
+OpBranchConditional %null %2 %3
+%3 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%phi = OpPhi %int %int_1 %1 %int_2 %3
+%add = OpIAdd %int %int_1 %phi
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+TEST_F(CCPTest, UndefBranchCondition) {
+  const std::string text = R"(
+; CHECK: [[int1:%\w+]] = OpConstant {{%\w+}} 1
+; CHECK: [[phi:%\w+]] = OpPhi
+; CHECK: OpIAdd {{%\w+}} [[int1]] [[phi]]
+OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %func "func"
+%void = OpTypeVoid
+%bool = OpTypeBool
+%int = OpTypeInt 32 1
+%undef = OpUndef %bool
+%int_1 = OpConstant %int 1
+%int_2 = OpConstant %int 2
+%functy = OpTypeFunction %void
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpSelectionMerge %2 None
+OpBranchConditional %undef %2 %3
+%3 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%phi = OpPhi %int %int_1 %1 %int_2 %3
+%add = OpIAdd %int %int_1 %phi
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+TEST_F(CCPTest, NullSwitchCondition) {
+  const std::string text = R"(
+; CHECK: [[int1:%\w+]] = OpConstant {{%\w+}} 1
+; CHECK: [[int2:%\w+]] = OpConstant {{%\w+}} 2
+; CHECK: OpIAdd {{%\w+}} [[int1]] [[int2]]
+OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %func "func"
+%void = OpTypeVoid
+%int = OpTypeInt 32 1
+%null = OpConstantNull %int
+%int_1 = OpConstant %int 1
+%int_2 = OpConstant %int 2
+%functy = OpTypeFunction %void
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpSelectionMerge %2 None
+OpSwitch %null %2 0 %3
+%3 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%phi = OpPhi %int %int_1 %1 %int_2 %3
+%add = OpIAdd %int %int_1 %phi
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+TEST_F(CCPTest, UndefSwitchCondition) {
+  const std::string text = R"(
+; CHECK: [[int1:%\w+]] = OpConstant {{%\w+}} 1
+; CHECK: [[phi:%\w+]] = OpPhi
+; CHECK: OpIAdd {{%\w+}} [[int1]] [[phi]]
+OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %func "func"
+%void = OpTypeVoid
+%int = OpTypeInt 32 1
+%undef = OpUndef %int
+%int_1 = OpConstant %int 1
+%int_2 = OpConstant %int 2
+%functy = OpTypeFunction %void
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpSelectionMerge %2 None
+OpSwitch %undef %2 0 %3
+%3 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%phi = OpPhi %int %int_1 %1 %int_2 %3
+%add = OpIAdd %int %int_1 %phi
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndMatch<opt::CCPPass>(text, true);
+}
+
+// Test for #1361.
+TEST_F(CCPTest, CompositeConstructOfGlobalValue) {
+  const std::string text = R"(
+; CHECK: [[phi:%\w+]] = OpPhi
+; CHECK-NEXT: OpCompositeExtract {{%\w+}} [[phi]] 0
+OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %func "func" %in
+%void = OpTypeVoid
+%int = OpTypeInt 32 1
+%bool = OpTypeBool
+%functy = OpTypeFunction %void
+%ptr_int_Input = OpTypePointer Input %int
+%in = OpVariable %ptr_int_Input Input
+%struct = OpTypeStruct %ptr_int_Input %ptr_int_Input
+%struct_null = OpConstantNull %struct
+%func = OpFunction %void None %functy
+%1 = OpLabel
+OpBranch %2
+%2 = OpLabel
+%phi = OpPhi %struct %struct_null %1 %5 %4
+%extract = OpCompositeExtract %ptr_int_Input %phi 0
+OpLoopMerge %3 %4 None
+OpBranch %4
+%4 = OpLabel
+%5 = OpCompositeConstruct %struct %in %in
+OpBranch %2
+%3 = OpLabel
+OpReturn
+OpFunctionEnd
 )";
 
   SinglePassRunAndMatch<opt::CCPPass>(text, true);

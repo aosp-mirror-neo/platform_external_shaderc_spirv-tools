@@ -41,11 +41,6 @@ namespace {
 #define UINT32_MAX 0xffffffff /* 4294967295U */
 #endif
 
-const ConstantFoldingRules& GetConstantFoldingRules() {
-  static ConstantFoldingRules* rules = new ConstantFoldingRules();
-  return *rules;
-}
-
 // Returns the single-word result from performing the given unary operation on
 // the operand value which is passed in as a 32-bit word.
 uint32_t UnaryOperate(SpvOp opcode, uint32_t operand) {
@@ -199,20 +194,10 @@ bool FoldInstructionInternal(ir::Instruction* inst) {
   }
 
   SpvOp opcode = inst->opcode();
-  analysis::ConstantManager* const_manger = context->get_constant_mgr();
+  analysis::ConstantManager* const_manager = context->get_constant_mgr();
 
-  std::vector<const analysis::Constant*> constants;
-  for (uint32_t i = 0; i < inst->NumInOperands(); i++) {
-    const ir::Operand* operand = &inst->GetInOperand(i);
-    if (operand->type != SPV_OPERAND_TYPE_ID) {
-      constants.push_back(nullptr);
-    } else {
-      uint32_t id = operand->words[0];
-      const analysis::Constant* constant =
-          const_manger->FindDeclaredConstant(id);
-      constants.push_back(constant);
-    }
-  }
+  std::vector<const analysis::Constant*> constants =
+      const_manager->GetOperandConstants(inst);
 
   static FoldingRules* rules = new FoldingRules();
   for (FoldingRule rule : rules->GetRulesForOpcode(opcode)) {
@@ -224,6 +209,11 @@ bool FoldInstructionInternal(ir::Instruction* inst) {
 }
 
 }  // namespace
+
+const ConstantFoldingRules& GetConstantFoldingRules() {
+  static ConstantFoldingRules* rules = new ConstantFoldingRules();
+  return *rules;
+}
 
 // Returns the result of performing an operation on scalar constant operands.
 // This function extracts the operand values as 32 bit words and returns the
@@ -466,7 +456,7 @@ bool FoldBinaryBooleanOpToConstant(ir::Instruction* inst,
   }
 
   switch (opcode) {
-      // Logical
+    // Logical
     case SpvOp::SpvOpLogicalOr:
       for (uint32_t i = 0; i < 2; i++) {
         if (constants[i] != nullptr) {
@@ -612,7 +602,7 @@ ir::Instruction* FoldInstructionToConstant(
   ir::IRContext* context = inst->context();
   analysis::ConstantManager* const_mgr = context->get_constant_mgr();
 
-  if (!inst->IsFoldable() &&
+  if (!inst->IsFoldableByFoldScalar() &&
       !GetConstantFoldingRules().HasFoldingRule(inst->opcode())) {
     return nullptr;
   }
@@ -649,12 +639,12 @@ ir::Instruction* FoldInstructionToConstant(
   uint32_t result_val = 0;
   bool successful = false;
   // If all parameters are constant, fold the instruction to a constant.
-  if (!missing_constants && inst->IsFoldable()) {
+  if (!missing_constants && inst->IsFoldableByFoldScalar()) {
     result_val = FoldScalars(inst->opcode(), constants);
     successful = true;
   }
 
-  if (!successful && inst->IsFoldable()) {
+  if (!successful && inst->IsFoldableByFoldScalar()) {
     successful = FoldIntegerOpToConstant(inst, id_map, &result_val);
   }
 

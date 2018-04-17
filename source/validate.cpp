@@ -35,6 +35,7 @@
 #include "spirv-tools/libspirv.h"
 #include "spirv_constant.h"
 #include "spirv_endian.h"
+#include "spirv_target_env.h"
 #include "spirv_validator_options.h"
 #include "val/construct.h"
 #include "val/function.h"
@@ -59,15 +60,10 @@ using libspirv::ValidationState_t;
 
 spv_result_t spvValidateIDs(const spv_instruction_t* pInsts,
                             const uint64_t count,
-                            const spv_opcode_table opcodeTable,
-                            const spv_operand_table operandTable,
-                            const spv_ext_inst_table extInstTable,
                             const ValidationState_t& state,
                             spv_position position) {
   position->index = SPV_INDEX_INSTRUCTION;
-  if (auto error =
-          spvValidateInstructionIDs(pInsts, count, opcodeTable, operandTable,
-                                    extInstTable, state, position))
+  if (auto error = spvValidateInstructionIDs(pInsts, count, state, position))
     return error;
   return SPV_SUCCESS;
 }
@@ -161,7 +157,8 @@ spv_result_t ProcessInstruction(void* user_data,
   _.increment_instruction_count();
   if (static_cast<SpvOp>(inst->opcode) == SpvOpEntryPoint) {
     const auto entry_point = inst->words[2];
-    _.RegisterEntryPointId(entry_point);
+    const SpvExecutionModel execution_model = SpvExecutionModel(inst->words[1]);
+    _.RegisterEntryPointId(entry_point, execution_model);
     // Operand 3 and later are the <id> of interfaces for the entry point.
     for (int i = 3; i < inst->num_operands; ++i) {
       _.RegisterInterfaceForEntryPoint(entry_point,
@@ -259,6 +256,16 @@ spv_result_t ValidateBinaryUsingContextAndValidationState(
            << "Invalid SPIR-V header.";
   }
 
+  if (header.version > spvVersionForTargetEnv(context.target_env)) {
+    return libspirv::DiagnosticStream(position, context.consumer,
+                                      SPV_ERROR_WRONG_VERSION)
+           << "Invalid SPIR-V binary version "
+           << SPV_SPIRV_VERSION_MAJOR_PART(header.version) << "."
+           << SPV_SPIRV_VERSION_MINOR_PART(header.version)
+           << " for target environment "
+           << spvTargetEnvDescription(context.target_env) << ".";
+  }
+
   // Look for OpExtension instructions and register extensions.
   // Diagnostics if any will be produced in the next pass (ProcessInstruction).
   spvBinaryParse(&context, vstate, words, num_words,
@@ -290,6 +297,8 @@ spv_result_t ValidateBinaryUsingContextAndValidationState(
            << "The following forward referenced IDs have not been defined:\n"
            << id_str.substr(0, id_str.size() - 1);
   }
+
+  vstate->ComputeFunctionToEntryPointMapping();
 
   // Validate the preconditions involving adjacent instructions. e.g. SpvOpPhi
   // must only be preceeded by SpvOpLabel, SpvOpPhi, or SpvOpLine.
@@ -341,9 +350,13 @@ spv_result_t ValidateBinaryUsingContextAndValidationState(
   }
 
   position.index = SPV_INDEX_INSTRUCTION;
-  return spvValidateIDs(instructions.data(), instructions.size(),
-                        context.opcode_table, context.operand_table,
-                        context.ext_inst_table, *vstate, &position);
+  if (auto error = spvValidateIDs(instructions.data(), instructions.size(),
+                                  *vstate, &position))
+    return error;
+
+  if (auto error = ValidateBuiltIns(*vstate)) return error;
+
+  return SPV_SUCCESS;
 }
 }  // anonymous namespace
 

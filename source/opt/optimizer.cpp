@@ -90,8 +90,12 @@ Optimizer& Optimizer::RegisterPass(PassToken&& p) {
 // or enable more copy propagation.
 Optimizer& Optimizer::RegisterLegalizationPasses() {
   return
-      // Make sure uses and definitions are in the same function.
-      RegisterPass(CreateInlineExhaustivePass())
+      // Remove unreachable block so that merge return works.
+      RegisterPass(CreateDeadBranchElimPass())
+          // Merge the returns so we can inline.
+          .RegisterPass(CreateMergeReturnPass())
+          // Make sure uses and definitions are in the same function.
+          .RegisterPass(CreateInlineExhaustivePass())
           // Make private variable function scope
           .RegisterPass(CreateEliminateDeadFunctionsPass())
           .RegisterPass(CreatePrivateToLocalPass())
@@ -116,6 +120,8 @@ Optimizer& Optimizer::RegisterLegalizationPasses() {
           // scalar replacement.  Also important for removing OpPhi nodes.
           .RegisterPass(CreateSimplificationPass())
           .RegisterPass(CreateInsertExtractElimPass())
+          .RegisterPass(CreateAggressiveDCEPass())
+          .RegisterPass(CreateCopyPropagateArraysPass())
           // May need loop unrolling here see
           // https://github.com/Microsoft/DirectXShaderCompiler/pull/930
           // Get rid of unused code that contain traces of illegal code
@@ -147,6 +153,7 @@ Optimizer& Optimizer::RegisterPerformancePasses() {
       .RegisterPass(CreateDeadBranchElimPass())
       .RegisterPass(CreateSimplificationPass())
       .RegisterPass(CreateIfConversionPass())
+      .RegisterPass(CreateCopyPropagateArraysPass())
       .RegisterPass(CreateAggressiveDCEPass())
       .RegisterPass(CreateBlockMergePass())
       .RegisterPass(CreateRedundancyEliminationPass())
@@ -211,6 +218,11 @@ Optimizer& Optimizer::SetPrintAll(std::ostream* out) {
   return *this;
 }
 
+Optimizer& Optimizer::SetTimeReport(std::ostream* out) {
+  impl_->pass_manager.SetTimeReport(out);
+  return *this;
+}
+
 Optimizer::PassToken CreateNullPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::NullPass>());
 }
@@ -218,6 +230,11 @@ Optimizer::PassToken CreateNullPass() {
 Optimizer::PassToken CreateStripDebugInfoPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::StripDebugInfoPass>());
+}
+
+Optimizer::PassToken CreateStripReflectInfoPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StripReflectInfoPass>());
 }
 
 Optimizer::PassToken CreateEliminateDeadFunctionsPass() {
@@ -364,6 +381,11 @@ Optimizer::PassToken CreateLoopInvariantCodeMotionPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::LICMPass>());
 }
 
+Optimizer::PassToken CreateLoopPeelingPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::LoopPeelingPass>());
+}
+
 Optimizer::PassToken CreateLoopUnswitchPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::LoopUnswitchPass>());
@@ -417,4 +439,15 @@ Optimizer::PassToken CreateLoopUnrollPass(bool fully_unroll, int factor) {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::LoopUnroller>(fully_unroll, factor));
 }
+
+Optimizer::PassToken CreateSSARewritePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::SSARewritePass>());
+}
+
+Optimizer::PassToken CreateCopyPropagateArraysPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::CopyPropagateArrays>());
+}
+
 }  // namespace spvtools

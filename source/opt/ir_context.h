@@ -24,6 +24,7 @@
 #include "feature_manager.h"
 #include "loop_descriptor.h"
 #include "module.h"
+#include "scalar_analysis.h"
 #include "type_manager.h"
 
 #include <algorithm>
@@ -58,7 +59,8 @@ class IRContext {
     kAnalysisDominatorAnalysis = 1 << 5,
     kAnalysisLoopAnalysis = 1 << 6,
     kAnalysisNameMap = 1 << 7,
-    kAnalysisEnd = 1 << 8
+    kAnalysisScalarEvolution = 1 << 8,
+    kAnalysisEnd = 1 << 9
   };
 
   friend inline Analysis operator|(Analysis lhs, Analysis rhs);
@@ -258,6 +260,15 @@ class IRContext {
     return type_mgr_.get();
   }
 
+  // Returns a pointer to the scalar evolution analysis. If it is invalid it
+  // will be rebuilt first.
+  opt::ScalarEvolutionAnalysis* GetScalarEvolutionAnalysis() {
+    if (!AreAnalysesValid(kAnalysisScalarEvolution)) {
+      BuildScalarEvolutionAnalysis();
+    }
+    return scalar_evolution_analysis_.get();
+  }
+
   // Build the map from the ids to the OpName and OpMemberName instruction
   // associated with it.
   inline void BuildIdToNameMap();
@@ -444,6 +455,11 @@ class IRContext {
     valid_analyses_ = valid_analyses_ | kAnalysisCFG;
   }
 
+  void BuildScalarEvolutionAnalysis() {
+    scalar_evolution_analysis_.reset(new opt::ScalarEvolutionAnalysis(this));
+    valid_analyses_ = valid_analyses_ | kAnalysisScalarEvolution;
+  }
+
   // Removes all computed dominator and post-dominator trees. This will force
   // the context to rebuild the trees on demand.
   void ResetDominatorAnalysis() {
@@ -478,6 +494,10 @@ class IRContext {
 
   // Remove |inst| from |id_to_name_| if it is in map.
   void RemoveFromIdToName(const Instruction* inst);
+
+  // Returns true if it is suppose to be valid but it is incorrect.  Returns
+  // true if the cfg is invalidated.
+  bool CheckCFG();
 
   // The SPIR-V syntax context containing grammar tables for opcodes and
   // operands.
@@ -540,6 +560,9 @@ class IRContext {
 
   // A map from an id to its corresponding OpName and OpMemberName instructions.
   std::unique_ptr<std::multimap<uint32_t, Instruction*>> id_to_name_;
+
+  // The cache scalar evolution analysis node.
+  std::unique_ptr<opt::ScalarEvolutionAnalysis> scalar_evolution_analysis_;
 };
 
 inline ir::IRContext::Analysis operator|(ir::IRContext::Analysis lhs,
@@ -733,10 +756,16 @@ void IRContext::AddAnnotationInst(std::unique_ptr<Instruction>&& a) {
 
 void IRContext::AddType(std::unique_ptr<Instruction>&& t) {
   module()->AddType(std::move(t));
+  if (AreAnalysesValid(kAnalysisDefUse)) {
+    get_def_use_mgr()->AnalyzeInstDef(&*(--types_values_end()));
+  }
 }
 
 void IRContext::AddGlobalValue(std::unique_ptr<Instruction>&& v) {
   module()->AddGlobalValue(std::move(v));
+  if (AreAnalysesValid(kAnalysisDefUse)) {
+    get_def_use_mgr()->AnalyzeInstDef(&*(--types_values_end()));
+  }
 }
 
 void IRContext::AddFunction(std::unique_ptr<Function>&& f) {

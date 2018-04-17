@@ -119,6 +119,11 @@ class Optimizer {
   // output is sent to the |out| output stream.
   Optimizer& SetPrintAll(std::ostream* out);
 
+  // Sets the option to print the resource utilization of each pass. If |out|
+  // is null, then no output is generated. Otherwise, output is sent to the
+  // |out| output stream.
+  Optimizer& SetTimeReport(std::ostream* out);
+
  private:
   struct Impl;                  // Opaque struct for holding internal data.
   std::unique_ptr<Impl> impl_;  // Unique pointer to internal data.
@@ -132,6 +137,13 @@ Optimizer::PassToken CreateNullPass();
 // A strip-debug-info pass removes all debug instructions (as documented in
 // Section 3.32.2 of the SPIR-V spec) of the SPIR-V module to be optimized.
 Optimizer::PassToken CreateStripDebugInfoPass();
+
+// Creates a strip-reflect-info pass.
+// A strip-reflect-info pass removes all reflections instructions.
+// For now, this is limited to removing decorations defined in
+// SPV_GOOGLE_hlsl_functionality1.  The coverage may expand in
+// the future.
+Optimizer::PassToken CreateStripReflectInfoPass();
 
 // Creates an eliminate-dead-functions pass.
 // An eliminate-dead-functions pass will remove all functions that are not in
@@ -446,16 +458,19 @@ Optimizer::PassToken CreateCFGCleanupPass();
 // that are not referenced.
 Optimizer::PassToken CreateDeadVariableEliminationPass();
 
-// Create merge return pass.
-// This pass replaces all returns with unconditional branches to a new block
-// containing a return. If necessary, this new block will contain a PHI node to
-// select the correct return value.
+// create merge return pass.
+// changes functions that have multiple return statements so they have a single
+// return statement.
 //
-// This pass does not consider unreachable code, nor does it perform any other
-// optimizations.
+// for structured control flow it is assumed that the only unreachable blocks in
+// the function are trivial merge and continue blocks.
 //
-// This pass does not currently support structured control flow. It bails out if
-// the shader capability is detected.
+// a trivial merge block contains the label and an opunreachable instructions,
+// nothing else.  a trivial continue block contain a label and an opbranch to
+// the header, nothing else.
+//
+// these conditions are guaranteed to be met after running dead-branch
+// elimination.
 Optimizer::PassToken CreateMergeReturnPass();
 
 // Create value numbering pass.
@@ -467,6 +482,14 @@ Optimizer::PassToken CreateLocalRedundancyEliminationPass();
 // This pass will look for invariant instructions inside loops and hoist them to
 // the loops preheader.
 Optimizer::PassToken CreateLoopInvariantCodeMotionPass();
+
+// Creates a loop peeling pass.
+// This pass will look for conditions inside a loop that are true or false only
+// for the N first or last iteration. For loop with such condition, those N
+// iterations of the loop will be executed outside of the main loop.
+// To limit code size explosion, the loop peeling can only happen if the code
+// size growth for each loop is under |code_growth_threshold|.
+Optimizer::PassToken CreateLoopPeelingPass();
 
 // Creates a loop unswitch pass.
 // This pass will look for loop independent branch conditions and move the
@@ -526,6 +549,17 @@ Optimizer::PassToken CreateSimplificationPass();
 // won't be unrolled. See CanPerformUnroll LoopUtils.h for more information.
 Optimizer::PassToken CreateLoopUnrollPass(bool fully_unroll, int factor = 0);
 
+// Create the SSA rewrite pass.
+// This pass converts load/store operations on function local variables into
+// operations on SSA IDs.  This allows SSA optimizers to act on these variables.
+// Only variables that are local to the function and of supported types are
+// processed (see IsSSATargetVar for details).
+Optimizer::PassToken CreateSSARewritePass();
+
+// Create copy propagate arrays pass.
+// This pass looks to copy propagate memory references for arrays.  It looks
+// for specific code patterns to recognize array copies.
+Optimizer::PassToken CreateCopyPropagateArraysPass();
 }  // namespace spvtools
 
 #endif  // SPIRV_TOOLS_OPTIMIZER_HPP_

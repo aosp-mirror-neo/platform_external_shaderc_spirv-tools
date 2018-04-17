@@ -256,7 +256,7 @@ void LocalAccessChainConvertPass::Initialize(ir::IRContext* c) {
 
   // Initialize extension whitelist
   InitExtensions();
-};
+}
 
 bool LocalAccessChainConvertPass::AllExtensionsSupported() const {
   // If any extension not in whitelist, return false
@@ -330,6 +330,10 @@ void LocalAccessChainConvertPass::InitExtensions() {
       "SPV_AMD_shader_fragment_mask",
       "SPV_EXT_fragment_fully_covered",
       "SPV_AMD_gpu_shader_half_float_fetch",
+      "SPV_GOOGLE_decorate_string",
+      "SPV_GOOGLE_hlsl_functionality1",
+      "SPV_NV_shader_subgroup_partitioned",
+      "SPV_EXT_descriptor_indexing",
   });
 }
 

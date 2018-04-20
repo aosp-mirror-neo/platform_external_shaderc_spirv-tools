@@ -54,6 +54,7 @@ SPVTOOLS_SRC_FILES := \
 		source/validate_layout.cpp \
 		source/validate_literals.cpp \
 		source/validate_logicals.cpp \
+		source/validate_non_uniform.cpp \
 		source/validate_primitives.cpp \
 		source/validate_type_unique.cpp
 
@@ -118,6 +119,7 @@ SPVTOOLS_OPT_SRC_FILES := \
 		source/opt/private_to_local_pass.cpp \
 		source/opt/propagator.cpp \
 		source/opt/redundancy_elimination.cpp \
+		source/opt/register_pressure.cpp \
 		source/opt/remove_duplicates_pass.cpp \
 		source/opt/replace_invalid_opc.cpp \
 		source/opt/scalar_analysis.cpp \

@@ -105,13 +105,10 @@ class EntryPoints : public spvtest::LinkerTest {
   spvtest::Binaries binaries;
 };
 
-// TODO(dneto): Fix performance issue for debug builds on Windows
-#if !(defined(SPIRV_WINDOWS) && defined(_DEBUG))
-
 TEST_F(EntryPoints, UnderLimit) {
   spvtest::Binary linked_binary;
 
-  ASSERT_EQ(SPV_SUCCESS, Link(binaries, &linked_binary));
+  EXPECT_EQ(SPV_SUCCESS, Link(binaries, &linked_binary));
   EXPECT_THAT(GetErrorMessage(), std::string());
 }
 
@@ -143,11 +140,10 @@ TEST_F(EntryPoints, OverLimit) {
 
   spvtest::Binary linked_binary;
 
-  ASSERT_EQ(SPV_ERROR_INTERNAL, Link(binaries, &linked_binary));
+  EXPECT_EQ(SPV_ERROR_INTERNAL, Link(binaries, &linked_binary));
   EXPECT_THAT(GetErrorMessage(),
               HasSubstr("The limit of global values, 65535, was exceeded; "
                         "65536 global values were found."));
 }
-#endif // !(defined(SPIRV_WINDOWS) && defined(_DEBUG))
 
 }  // anonymous namespace

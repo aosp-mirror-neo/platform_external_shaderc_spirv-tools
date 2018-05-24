@@ -14,32 +14,31 @@
 
 #include "function.h"
 
-#include "make_unique.h"
+#include <ostream>
+#include <sstream>
 
 namespace spvtools {
 namespace ir {
 
-Function::Function(const Function& f)
-    : module_(nullptr),
-      def_inst_(MakeUnique<Instruction>(f.DefInst())),
-      params_(),
-      blocks_(),
-      end_inst_() {
-  params_.reserve(f.params_.size());
-  f.ForEachParam(
-      [this](const Instruction* insn) {
-        AddParameter(MakeUnique<Instruction>(*insn));
+Function* Function::Clone(IRContext* ctx) const {
+  Function* clone =
+      new Function(std::unique_ptr<Instruction>(DefInst().Clone(ctx)));
+  clone->params_.reserve(params_.size());
+  ForEachParam(
+      [clone, ctx](const Instruction* inst) {
+        clone->AddParameter(std::unique_ptr<Instruction>(inst->Clone(ctx)));
       },
       true);
 
-  blocks_.reserve(f.blocks_.size());
-  for (const auto& b : f.blocks_) {
-    std::unique_ptr<BasicBlock> bb = MakeUnique<BasicBlock>(*b);
-    bb->SetParent(this);
-    AddBasicBlock(std::move(bb));
+  clone->blocks_.reserve(blocks_.size());
+  for (const auto& b : blocks_) {
+    std::unique_ptr<BasicBlock> bb(b->Clone(ctx));
+    bb->SetParent(clone);
+    clone->AddBasicBlock(std::move(bb));
   }
 
-  SetFunctionEnd(MakeUnique<Instruction>(f.function_end()));
+  clone->SetFunctionEnd(std::unique_ptr<Instruction>(EndInst()->Clone(ctx)));
+  return clone;
 }
 
 void Function::ForEachInst(const std::function<void(Instruction*)>& f,
@@ -74,6 +73,36 @@ void Function::ForEachParam(const std::function<void(const Instruction*)>& f,
   for (const auto& param : params_)
     static_cast<const Instruction*>(param.get())
         ->ForEachInst(f, run_on_debug_line_insts);
+}
+
+BasicBlock* Function::InsertBasicBlockAfter(
+    std::unique_ptr<BasicBlock>&& new_block, BasicBlock* position) {
+  for (auto bb_iter = begin(); bb_iter != end(); ++bb_iter) {
+    if (&*bb_iter == position) {
+      new_block->SetParent(this);
+      ++bb_iter;
+      bb_iter = bb_iter.InsertBefore(std::move(new_block));
+      return &*bb_iter;
+    }
+  }
+  assert(false && "Could not find insertion point.");
+  return nullptr;
+}
+
+std::ostream& operator<<(std::ostream& str, const Function& func) {
+  str << func.PrettyPrint();
+  return str;
+}
+
+std::string Function::PrettyPrint(uint32_t options) const {
+  std::ostringstream str;
+  ForEachInst([&str, options](const ir::Instruction* inst) {
+    str << inst->PrettyPrint(options);
+    if (inst->opcode() != SpvOpFunctionEnd) {
+      str << std::endl;
+    }
+  });
+  return str.str();
 }
 
 }  // namespace ir

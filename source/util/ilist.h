@@ -122,6 +122,17 @@ class IntrusiveList {
       return iterator(first_node);
     }
 
+    // Define standard iterator types needs so this class can be
+    // used with <algorithms>.
+    using iterator_category = std::bidirectional_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+    using value_type = T;
+    using pointer = T*;
+    using const_pointer = const T*;
+    using reference = T&;
+    using const_reference = const T&;
+    using size_type = size_t;
+
    protected:
     iterator_template() = delete;
     inline iterator_template(T* node) { node_ = node; }
@@ -160,12 +171,21 @@ class IntrusiveList {
   // Returns true if the list is empty.
   bool empty() const;
 
+  // Makes the current list empty.
+  inline void clear();
+
   // Returns references to the first or last element in the list.  It is an
   // error to call these functions on an empty list.
   NodeType& front();
   NodeType& back();
   const NodeType& front() const;
   const NodeType& back() const;
+
+  // Transfers [|first|, |last|) from |other| into the list at |where|.
+  //
+  // If |other| is |this|, no change is made.
+  void Splice(iterator where, IntrusiveList<NodeType>* other, iterator first,
+              iterator last);
 
  protected:
   // Doing a deep copy of the list does not make sense if the list does not own
@@ -202,9 +222,7 @@ IntrusiveList<NodeType>::IntrusiveList(IntrusiveList&& list) : sentinel_() {
 
 template <class NodeType>
 IntrusiveList<NodeType>::~IntrusiveList() {
-  while (!empty()) {
-    front().RemoveFromList();
-  }
+  clear();
 }
 
 template <class NodeType>
@@ -261,6 +279,13 @@ bool IntrusiveList<NodeType>::empty() const {
 }
 
 template <class NodeType>
+void IntrusiveList<NodeType>::clear() {
+  while (!empty()) {
+    front().RemoveFromList();
+  }
+}
+
+template <class NodeType>
 NodeType& IntrusiveList<NodeType>::front() {
   NodeType* node = sentinel_.NextNode();
   assert(node != nullptr && "Can't get the front of an empty list.");
@@ -286,6 +311,29 @@ const NodeType& IntrusiveList<NodeType>::back() const {
   NodeType* node = sentinel_.PreviousNode();
   assert(node != nullptr && "Can't get the back of an empty list.");
   return *node;
+}
+
+template <class NodeType>
+void IntrusiveList<NodeType>::Splice(iterator where,
+                                     IntrusiveList<NodeType>* other,
+                                     iterator first, iterator last) {
+  if (first == last) return;
+  if (other == this) return;
+
+  NodeType* first_prev = first.node_->previous_node_;
+  NodeType* where_next = where.node_->next_node_;
+
+  // Attach first.
+  where.node_->next_node_ = first.node_;
+  first.node_->previous_node_ = where.node_;
+
+  // Attach last.
+  where_next->previous_node_ = last.node_->previous_node_;
+  last.node_->previous_node_->next_node_ = where_next;
+
+  // Fixup other.
+  first_prev->next_node_ = last.node_;
+  last.node_->previous_node_ = first_prev;
 }
 
 template <class NodeType>

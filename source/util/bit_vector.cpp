@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Google Inc.
+// Copyright (c) 2018 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_
-#define SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_
+#include "bit_vector.h"
 
-#include "source/comp/markv_model.h"
+#include <iostream>
 
 namespace spvtools {
+namespace utils {
 
-// MARK-V model designed to be a default model for shader compression.
-class MarkvModelShaderDefault : public MarkvModel {
- public:
-  MarkvModelShaderDefault();
-};
+void BitVector::ReportDensity(std::ostream& out) {
+  uint32_t count = 0;
 
+  for (BitContainer e : bits_) {
+    while (e != 0) {
+      if ((e & 1) != 0) {
+        ++count;
+      }
+      e = e >> 1;
+    }
+  }
+
+  out << "count=" << count
+      << ", total size (bytes)=" << bits_.size() * sizeof(BitContainer)
+      << ", bytes per element="
+      << (double)(bits_.size() * sizeof(BitContainer)) / (double)(count);
+}
+}  // namespace utils
 }  // namespace spvtools
-
-#endif  // SPIRV_TOOLS_COMP_DEFAULT_SHADER_MARKV_MODEL_H_

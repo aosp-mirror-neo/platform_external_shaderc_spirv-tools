@@ -23,16 +23,15 @@ using namespace spvtools;
 using LocalAccessChainConvertTest = PassTest<::testing::Test>;
 
 TEST_F(LocalAccessChainConvertTest, StructOfVecsOfFloatConverted) {
-
   //  #version 140
-  //  
+  //
   //  in vec4 BaseColor;
-  //  
+  //
   //  struct S_t {
   //      vec4 v0;
   //      vec4 v1;
   //  };
-  //  
+  //
   //  void main()
   //  {
   //      S_t s0;
@@ -131,16 +130,15 @@ OpFunctionEnd
 }
 
 TEST_F(LocalAccessChainConvertTest, InBoundsAccessChainsConverted) {
-
   //  #version 140
-  //  
+  //
   //  in vec4 BaseColor;
-  //  
+  //
   //  struct S_t {
   //      vec4 v0;
   //      vec4 v1;
   //  };
-  //  
+  //
   //  void main()
   //  {
   //      S_t s0;
@@ -239,16 +237,15 @@ OpFunctionEnd
 }
 
 TEST_F(LocalAccessChainConvertTest, TwoUsesofSingleChainConverted) {
-
   //  #version 140
-  //  
+  //
   //  in vec4 BaseColor;
-  //  
+  //
   //  struct S_t {
   //      vec4 v0;
   //      vec4 v1;
   //  };
-  //  
+  //
   //  void main()
   //  {
   //      S_t s0;
@@ -458,22 +455,20 @@ OpFunctionEnd
       predefs + before + remain, predefs + after + remain, true, true);
 }
 
-TEST_F(LocalAccessChainConvertTest, 
-       UntargetedTypeNotConverted) {
-
+TEST_F(LocalAccessChainConvertTest, NestedStructsConverted) {
   //  #version 140
-  //  
+  //
   //  in vec4 BaseColor;
-  //  
+  //
   //  struct S1_t {
   //      vec4 v1;
   //  };
-  //  
+  //
   //  struct S2_t {
   //      vec4 v2;
   //      S1_t s1;
   //  };
-  //  
+  //
   //  void main()
   //  {
   //      S2_t s2;
@@ -481,7 +476,7 @@ TEST_F(LocalAccessChainConvertTest,
   //      gl_FragColor = s2.s1.v1;
   //  }
 
-  const std::string assembly =
+  const std::string predefs_before =
       R"(OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
@@ -512,7 +507,41 @@ OpName %gl_FragColor "gl_FragColor"
 %_ptr_Function_v4float = OpTypePointer Function %v4float
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %gl_FragColor = OpVariable %_ptr_Output_v4float Output
-%main = OpFunction %void None %9
+)";
+
+  const std::string predefs_after =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %gl_FragColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %S1_t "S1_t"
+OpMemberName %S1_t 0 "v1"
+OpName %S2_t "S2_t"
+OpMemberName %S2_t 0 "v2"
+OpMemberName %S2_t 1 "s1"
+OpName %s2 "s2"
+OpName %BaseColor "BaseColor"
+OpName %gl_FragColor "gl_FragColor"
+%void = OpTypeVoid
+%9 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%S1_t = OpTypeStruct %v4float
+%S2_t = OpTypeStruct %v4float %S1_t
+%_ptr_Function_S2_t = OpTypePointer Function %S2_t
+%int = OpTypeInt 32 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+)";
+
+  const std::string before =
+      R"(%main = OpFunction %void None %9
 %19 = OpLabel
 %s2 = OpVariable %_ptr_Function_S2_t Function
 %20 = OpLoad %v4float %BaseColor
@@ -525,15 +554,28 @@ OpReturn
 OpFunctionEnd
 )";
 
+  const std::string after =
+      R"(%main = OpFunction %void None %9
+%19 = OpLabel
+%s2 = OpVariable %_ptr_Function_S2_t Function
+%20 = OpLoad %v4float %BaseColor
+%24 = OpLoad %S2_t %s2
+%25 = OpCompositeInsert %S2_t %20 %24 1 0
+OpStore %s2 %25
+%26 = OpLoad %S2_t %s2
+%27 = OpCompositeExtract %v4float %26 1 0
+OpStore %gl_FragColor %27
+OpReturn
+OpFunctionEnd
+)";
+
   SinglePassRunAndCheck<opt::LocalAccessChainConvertPass>(
-      assembly, assembly, false, true);
+      predefs_before + before, predefs_after + after, true, true);
 }
 
-TEST_F(LocalAccessChainConvertTest, 
-       DynamicallyIndexedVarNotConverted) {
-
+TEST_F(LocalAccessChainConvertTest, DynamicallyIndexedVarNotConverted) {
   //  #version 140
-  //  
+  //
   //  in vec4 BaseColor;
   //  flat in int Idx;
   //  in float Bi;
@@ -542,7 +584,7 @@ TEST_F(LocalAccessChainConvertTest,
   //      vec4 v0;
   //      vec4 v1;
   //  };
-  //  
+  //
   //  void main()
   //  {
   //      S_t s0;
@@ -603,8 +645,69 @@ OpReturn
 OpFunctionEnd
 )";
 
+  SinglePassRunAndCheck<opt::LocalAccessChainConvertPass>(assembly, assembly,
+                                                          false, true);
+}
+
+TEST_F(LocalAccessChainConvertTest, SomeAccessChainsHaveNoUse) {
+  // Based on HLSL source code:
+  // struct S {
+  //   float f;
+  // };
+
+  // float main(float input : A) : B {
+  //   S local = { input };
+  //   return local.f;
+  // }
+
+  const std::string predefs = R"(OpCapability Shader
+OpMemoryModel Logical GLSL450
+OpEntryPoint Vertex %main "main" %in_var_A %out_var_B
+OpName %main "main"
+OpName %in_var_A "in.var.A"
+OpName %out_var_B "out.var.B"
+OpName %S "S"
+OpName %local "local"
+%int = OpTypeInt 32 1
+%void = OpTypeVoid
+%8 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%_ptr_Function_float = OpTypePointer Function %float
+%_ptr_Input_float = OpTypePointer Input %float
+%_ptr_Output_float = OpTypePointer Output %float
+%S = OpTypeStruct %float
+%_ptr_Function_S = OpTypePointer Function %S
+%int_0 = OpConstant %int 0
+%in_var_A = OpVariable %_ptr_Input_float Input
+%out_var_B = OpVariable %_ptr_Output_float Output
+%main = OpFunction %void None %8
+%15 = OpLabel
+%local = OpVariable %_ptr_Function_S Function
+%16 = OpLoad %float %in_var_A
+%17 = OpCompositeConstruct %S %16
+OpStore %local %17
+)";
+
+  const std::string before =
+      R"(%18 = OpAccessChain %_ptr_Function_float %local %int_0
+%19 = OpAccessChain %_ptr_Function_float %local %int_0
+%20 = OpLoad %float %18
+OpStore %out_var_B %20
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(%19 = OpAccessChain %_ptr_Function_float %local %int_0
+%21 = OpLoad %S %local
+%22 = OpCompositeExtract %float %21 0
+OpStore %out_var_B %22
+OpReturn
+OpFunctionEnd
+)";
+
   SinglePassRunAndCheck<opt::LocalAccessChainConvertPass>(
-      assembly, assembly, false, true);
+      predefs + before, predefs + after, true, true);
 }
 
 // TODO(greg-lunarg): Add tests to verify handling of these cases:

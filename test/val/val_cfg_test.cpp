@@ -262,8 +262,8 @@ TEST_P(ValidateCFG, LoopUnreachableFromEntryButLeadingToReturn) {
            OpFunctionEnd
   )";
   CompileSuccessfully(str);
-  ASSERT_EQ(SPV_SUCCESS, ValidateInstructions()) << str
-                                                 << getDiagnosticString();
+  ASSERT_EQ(SPV_SUCCESS, ValidateInstructions())
+      << str << getDiagnosticString();
 }
 
 TEST_P(ValidateCFG, Simple) {
@@ -278,9 +278,10 @@ TEST_P(ValidateCFG, Simple) {
     loop.SetBody("OpLoopMerge %merge %cont None\n");
   }
 
-  string str = header(GetParam()) + nameOps("loop", "entry", "cont", "merge",
-                                            make_pair("func", "Main")) +
-               types_consts() + "%func    = OpFunction %voidt None %funct\n";
+  string str =
+      header(GetParam()) +
+      nameOps("loop", "entry", "cont", "merge", make_pair("func", "Main")) +
+      types_consts() + "%func    = OpFunction %voidt None %funct\n";
 
   str += entry >> loop;
   str += loop >> vector<Block>({cont, merge});
@@ -452,7 +453,7 @@ TEST_P(ValidateCFG, MergeBlockTargetedByMultipleHeaderBlocksSelectionBad) {
   }
 }
 
-TEST_P(ValidateCFG, BranchTargetFirstBlockBad) {
+TEST_P(ValidateCFG, BranchTargetFirstBlockBadSinceEntryBlock) {
   Block entry("entry");
   Block bad("bad");
   Block end("end", SpvOpReturn);
@@ -470,6 +471,30 @@ TEST_P(ValidateCFG, BranchTargetFirstBlockBad) {
   EXPECT_THAT(getDiagnosticString(),
               MatchesRegex("First block .\\[entry\\] of function .\\[Main\\] "
                            "is targeted by block .\\[bad\\]"));
+}
+
+TEST_P(ValidateCFG, BranchTargetFirstBlockBadSinceValue) {
+  Block entry("entry");
+  Block bad("bad");
+  Block end("end", SpvOpReturn);
+  Block badvalue("func");  // This referenes the function name.
+  string str = header(GetParam()) +
+               nameOps("entry", "bad", make_pair("func", "Main")) +
+               types_consts() + "%func    = OpFunction %voidt None %funct\n";
+
+  str += entry >> bad;
+  str +=
+      bad >> badvalue;  // Check branch to a function value (it's not a block!)
+  str += end;
+  str += "OpFunctionEnd\n";
+
+  CompileSuccessfully(str);
+  ASSERT_EQ(SPV_ERROR_INVALID_CFG, ValidateInstructions());
+  EXPECT_THAT(
+      getDiagnosticString(),
+      MatchesRegex("Block\\(s\\) \\{.\\[Main\\]\\} are referenced but not "
+                   "defined in function .\\[Main\\]"))
+      << str;
 }
 
 TEST_P(ValidateCFG, BranchConditionalTrueTargetFirstBlockBad) {
@@ -588,7 +613,7 @@ TEST_P(ValidateCFG, BranchToBlockInOtherFunctionBad) {
   ASSERT_EQ(SPV_ERROR_INVALID_CFG, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      MatchesRegex("Block\\(s\\) \\{.\\[middle2\\] .\\} are referenced but not "
+      MatchesRegex("Block\\(s\\) \\{.\\[middle2\\]\\} are referenced but not "
                    "defined in function .\\[Main\\]"));
 }
 
@@ -1258,9 +1283,10 @@ TEST_P(ValidateCFG, ContinueTargetCanBeMergeBlockForNestedStructureGood) {
     if_head.SetBody("OpSelectionMerge %if_merge None\n");
   }
 
-  string str = header(GetParam()) + nameOps("entry", "loop", "if_head",
-                                            "if_true", "if_merge", "merge") +
-               types_consts() + "%func    = OpFunction %voidt None %funct\n";
+  string str =
+      header(GetParam()) +
+      nameOps("entry", "loop", "if_head", "if_true", "if_merge", "merge") +
+      types_consts() + "%func    = OpFunction %voidt None %funct\n";
 
   str += entry >> loop;
   str += loop >> if_head;
@@ -1298,8 +1324,8 @@ TEST_P(ValidateCFG, SingleLatchBlockMultipleBranchesToLoopHeader) {
   str += "OpFunctionEnd";
 
   CompileSuccessfully(str);
-  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions()) << str
-                                                 << getDiagnosticString();
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions())
+      << str << getDiagnosticString();
 }
 
 TEST_P(ValidateCFG, SingleLatchBlockHeaderContinueTargetIsItselfGood) {
@@ -1330,8 +1356,8 @@ TEST_P(ValidateCFG, SingleLatchBlockHeaderContinueTargetIsItselfGood) {
   str += "OpFunctionEnd";
 
   CompileSuccessfully(str);
-  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions()) << str
-                                                 << getDiagnosticString();
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions())
+      << str << getDiagnosticString();
 }
 
 // Unit test to check the case where a basic block is the entry block of 2
@@ -1399,4 +1425,4 @@ TEST_F(ValidateCFG, OpReturnInNonVoidFunc) {
 
 /// TODO(umar): Switch instructions
 /// TODO(umar): Nested CFG constructs
-}  /// namespace
+}  // namespace

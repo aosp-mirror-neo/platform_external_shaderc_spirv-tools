@@ -22,6 +22,16 @@ namespace {
 
 using namespace spvtools;
 
+// TODO(antiagainst): Use public C API for setting the consumer once exists.
+#ifndef SPIRV_TOOLS_SHAREDLIB
+void SetContextMessageConsumer(spv_context context,
+                               spvtools::MessageConsumer consumer) {
+  libspirv::SetContextMessageConsumer(context, consumer);
+}
+#else
+void SetContextMessageConsumer(spv_context, spvtools::MessageConsumer) {}
+#endif
+
 // The default consumer is a null std::function.
 TEST(CInterface, DefaultConsumerNullDiagnosticForValidInput) {
   auto context = spvContextCreate(SPV_ENV_UNIVERSAL_1_1);
@@ -105,7 +115,6 @@ TEST(CInterface, SpecifyConsumerNullDiagnosticForAssembling) {
 
   auto context = spvContextCreate(SPV_ENV_UNIVERSAL_1_1);
   int invocation = 0;
-  // TODO(antiagainst): Use public C API for setting the consumer once exists.
   SetContextMessageConsumer(
       context,
       [&invocation](spv_message_level_t level, const char* source,
@@ -124,7 +133,9 @@ TEST(CInterface, SpecifyConsumerNullDiagnosticForAssembling) {
   EXPECT_EQ(SPV_ERROR_INVALID_TEXT,
             spvTextToBinary(context, input_text, sizeof(input_text), &binary,
                             nullptr));
+#ifndef SPIRV_TOOLS_SHAREDLIB
   EXPECT_EQ(1, invocation);
+#endif
   spvBinaryDestroy(binary);
   spvContextDestroy(context);
 }
@@ -157,7 +168,9 @@ TEST(CInterface, SpecifyConsumerNullDiagnosticForDisassembling) {
   EXPECT_EQ(SPV_ERROR_INVALID_BINARY,
             spvBinaryToText(context, binary->code, binary->wordCount, 0, &text,
                             nullptr));
+#ifndef SPIRV_TOOLS_SHAREDLIB
   EXPECT_EQ(1, invocation);
+#endif
 
   spvTextDestroy(text);
   spvBinaryDestroy(binary);
@@ -191,7 +204,9 @@ TEST(CInterface, SpecifyConsumerNullDiagnosticForValidating) {
 
   spv_const_binary_t b{binary->code, binary->wordCount};
   EXPECT_EQ(SPV_ERROR_INVALID_LAYOUT, spvValidate(context, &b, nullptr));
+#ifndef SPIRV_TOOLS_SHAREDLIB
   EXPECT_EQ(1, invocation);
+#endif
 
   spvBinaryDestroy(binary);
   spvContextDestroy(context);

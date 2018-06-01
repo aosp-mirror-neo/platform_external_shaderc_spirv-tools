@@ -317,3 +317,12 @@ add_spvtools_unittest(TARGET scalar_analysis
   LIBS SPIRV-Tools-opt
 )
 
+add_spvtools_unittest(TARGET vector_dce
+  SRCS vector_dce_test.cpp pass_utils.cpp
+  LIBS SPIRV-Tools-opt
+)
+
+add_spvtools_unittest(TARGET reduce_load_size
+  SRCS reduce_load_size_test.cpp pass_utils.cpp
+  LIBS SPIRV-Tools-opt
+)

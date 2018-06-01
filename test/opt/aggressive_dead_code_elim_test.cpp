@@ -1268,6 +1268,112 @@ OpFunctionEnd
   SinglePassRunAndCheck<opt::AggressiveDCEPass>(assembly, assembly, true, true);
 }
 
+TEST_F(AggressiveDCETest, WorkgroupStoreElimInEntryNoCalls) {
+  // Eliminate stores to private in entry point with no calls
+  // Note: Not legal GLSL
+  //
+  // layout(location = 0) in vec4 BaseColor;
+  // layout(location = 1) in vec4 Dead;
+  // layout(location = 0) out vec4 OutColor;
+  //
+  // workgroup vec4 dv;
+  //
+  // void main()
+  // {
+  //     vec4 v = BaseColor;
+  //     dv = Dead;
+  //     OutColor = v;
+  // }
+
+  const std::string predefs_before =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %Dead %OutColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 450
+OpName %main "main"
+OpName %v "v"
+OpName %BaseColor "BaseColor"
+OpName %dv "dv"
+OpName %Dead "Dead"
+OpName %OutColor "OutColor"
+OpDecorate %BaseColor Location 0
+OpDecorate %Dead Location 1
+OpDecorate %OutColor Location 0
+%void = OpTypeVoid
+%9 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Workgroup_v4float = OpTypePointer Workgroup %v4float
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%Dead = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%dv = OpVariable %_ptr_Workgroup_v4float Workgroup
+%OutColor = OpVariable %_ptr_Output_v4float Output
+)";
+
+  const std::string predefs_after =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %Dead %OutColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 450
+OpName %main "main"
+OpName %v "v"
+OpName %BaseColor "BaseColor"
+OpName %Dead "Dead"
+OpName %OutColor "OutColor"
+OpDecorate %BaseColor Location 0
+OpDecorate %Dead Location 1
+OpDecorate %OutColor Location 0
+%void = OpTypeVoid
+%9 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%Dead = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%OutColor = OpVariable %_ptr_Output_v4float Output
+)";
+
+  const std::string main_before =
+      R"(%main = OpFunction %void None %9
+%16 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%17 = OpLoad %v4float %BaseColor
+OpStore %v %17
+%18 = OpLoad %v4float %Dead
+OpStore %dv %18
+%19 = OpLoad %v4float %v
+%20 = OpFNegate %v4float %19
+OpStore %OutColor %20
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string main_after =
+      R"(%main = OpFunction %void None %9
+%16 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%17 = OpLoad %v4float %BaseColor
+OpStore %v %17
+%19 = OpLoad %v4float %v
+%20 = OpFNegate %v4float %19
+OpStore %OutColor %20
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::AggressiveDCEPass>(
+      predefs_before + main_before, predefs_after + main_after, true, true);
+}
+
 TEST_F(AggressiveDCETest, EliminateDeadIfThenElse) {
   // #version 450
   //
@@ -5443,6 +5549,222 @@ OpFunctionEnd
       preamble + body_before, preamble + body_after, true, true);
 }
 
+TEST_F(AggressiveDCETest, CopyMemoryToGlobal) {
+  // |local| is loaded in an OpCopyMemory instruction.  So the store must be
+  // kept alive.
+  const std::string test =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %local "local"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%12 = OpConstantNull %v4float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+%local = OpVariable %_ptr_Function_v4float Function
+OpStore %local %12
+OpCopyMemory %global %local
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<opt::AggressiveDCEPass>(test, test, true, true);
+}
+
+TEST_F(AggressiveDCETest, CopyMemoryToLocal) {
+  // Make sure the store to |local2| using OpCopyMemory is kept and keeps
+  // |local1| alive.
+  const std::string test =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %local1 "local1"
+OpName %local2 "local2"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%12 = OpConstantNull %v4float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+%local1 = OpVariable %_ptr_Function_v4float Function
+%local2 = OpVariable %_ptr_Function_v4float Function
+OpStore %local1 %12
+OpCopyMemory %local2 %local1
+OpCopyMemory %global %local2
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<opt::AggressiveDCEPass>(test, test, true, true);
+}
+
+TEST_F(AggressiveDCETest, RemoveCopyMemoryToLocal) {
+  // Test that we remove function scope variables that are stored to using
+  // OpCopyMemory, but are never loaded.  We can remove both |local1| and
+  // |local2|.
+  const std::string test =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %local1 "local1"
+OpName %local2 "local2"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%12 = OpConstantNull %v4float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+%local1 = OpVariable %_ptr_Function_v4float Function
+%local2 = OpVariable %_ptr_Function_v4float Function
+OpStore %local1 %12
+OpCopyMemory %local2 %local1
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string result =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<opt::AggressiveDCEPass>(test, result, true, true);
+}
+
+TEST_F(AggressiveDCETest, RemoveCopyMemoryToLocal2) {
+  // We are able to remove "local2" because it is not loaded, but have to keep
+  // the stores to "local1".
+  const std::string test =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %local1 "local1"
+OpName %local2 "local2"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%12 = OpConstantNull %v4float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+%local1 = OpVariable %_ptr_Function_v4float Function
+%local2 = OpVariable %_ptr_Function_v4float Function
+OpStore %local1 %12
+OpCopyMemory %local2 %local1
+OpCopyMemory %global %local1
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string result =
+      R"(OpCapability Geometry
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Geometry %main "main" %global
+OpExecutionMode %main Triangles
+OpExecutionMode %main Invocations 1
+OpExecutionMode %main OutputTriangleStrip
+OpExecutionMode %main OutputVertices 5
+OpSource GLSL 440
+OpName %main "main"
+OpName %local1 "local1"
+OpName %global "global"
+%void = OpTypeVoid
+%7 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%12 = OpConstantNull %v4float
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%global = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %7
+%19 = OpLabel
+%local1 = OpVariable %_ptr_Function_v4float Function
+OpStore %local1 %12
+OpCopyMemory %global %local1
+OpEndPrimitive
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<opt::AggressiveDCEPass>(test, result, true, true);
+}
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
 //
 //    Check that logical addressing required

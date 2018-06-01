@@ -45,7 +45,6 @@ add_library(SPIRV-Tools-opt
   inline_exhaustive_pass.h
   inline_opaque_pass.h
   inline_pass.h
-  insert_extract_elim.h
   instruction.h
   instruction_list.h
   ir_builder.h
@@ -60,6 +59,9 @@ add_library(SPIRV-Tools-opt
   log.h
   loop_dependence.h
   loop_descriptor.h
+  loop_fission.h
+  loop_fusion.h
+  loop_fusion_pass.h
   loop_peeling.h
   loop_unroller.h
   loop_utils.h
@@ -74,6 +76,7 @@ add_library(SPIRV-Tools-opt
   pass_manager.h
   private_to_local_pass.h
   propagator.h
+  reduce_load_size.h
   redundancy_elimination.h
   reflect.h
   register_pressure.h
@@ -93,6 +96,7 @@ add_library(SPIRV-Tools-opt
   types.h
   unify_const_pass.h
   value_number_table.h
+  vector_dce.h
   workaround1209.h
 
   aggressive_dead_code_elim_pass.cpp
@@ -128,7 +132,6 @@ add_library(SPIRV-Tools-opt
   inline_exhaustive_pass.cpp
   inline_opaque_pass.cpp
   inline_pass.cpp
-  insert_extract_elim.cpp
   instruction.cpp
   instruction_list.cpp
   ir_context.cpp
@@ -142,6 +145,9 @@ add_library(SPIRV-Tools-opt
   loop_dependence.cpp
   loop_dependence_helpers.cpp
   loop_descriptor.cpp
+  loop_fission.cpp
+  loop_fusion.cpp
+  loop_fusion_pass.cpp
   loop_peeling.cpp
   loop_utils.cpp
   loop_unroller.cpp
@@ -154,6 +160,7 @@ add_library(SPIRV-Tools-opt
   pass_manager.cpp
   private_to_local_pass.cpp
   propagator.cpp
+  reduce_load_size.cpp
   redundancy_elimination.cpp
   register_pressure.cpp
   remove_duplicates_pass.cpp
@@ -171,6 +178,7 @@ add_library(SPIRV-Tools-opt
   types.cpp
   unify_const_pass.cpp
   value_number_table.cpp
+  vector_dce.cpp
   workaround1209.cpp
 )
 

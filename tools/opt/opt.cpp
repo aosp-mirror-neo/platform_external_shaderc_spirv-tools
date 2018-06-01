@@ -132,9 +132,9 @@ Options (in lexicographical order):
   --eliminate-dead-variables
                Deletes module scope variables that are not referenced.
   --eliminate-insert-extract
-               Replace extract from a sequence of inserts with the
-               corresponding value. Performed only on entry point call tree
-               functions.
+               DEPRECATED.  This pass has been replaced by the simplification
+               pass, and that pass will be run instead.
+               See --simplify-instructions.
   --eliminate-local-multi-store
                Replace stores and loads of function scope variables that are
                stored multiple times. Performed on variables referenceed only
@@ -176,6 +176,17 @@ Options (in lexicographical order):
   --local-redundancy-elimination
                Looks for instructions in the same basic block that compute the
                same value, and deletes the redundant ones.
+  --loop-fission
+               Splits any top level loops in which the register pressure has exceeded
+               a given threshold. The threshold must follow the use of this flag and
+               must be a positive integer value.
+  --loop-fusion
+               Identifies adjacent loops with the same lower and upper bound.
+               If this is legal, then merge the loops into a single loop.
+               Includes heuristics to ensure it does not increase number of
+               registers too much, while reducing the number of loads from
+               memory. Takes an additional positive integer argument to set
+               the maximum number of registers.
   --loop-unroll
                Fully unrolls loops marked with the Unroll flag
   --loop-unroll-partial
@@ -261,9 +272,9 @@ Options (in lexicographical order):
   --private-to-local
                Change the scope of private variables that are used in a single
                function to that function.
-  --remove-duplicates
-               Removes duplicate types, decorations, capabilities and extension
-               instructions.
+  --reduce-load-size
+               Replaces loads of composite objects where not every component is
+               used by loads of just the elements that are used.
   --redundancy-elimination
                Looks for instructions in the same function that compute the
                same value, and deletes the redundant ones.
@@ -271,6 +282,9 @@ Options (in lexicographical order):
                Allow store from one struct type to a different type with
                compatible layout and members. This option is forwarded to the
                validator.
+  --remove-duplicates
+               Removes duplicate types, decorations, capabilities and extension
+               instructions.
   --replace-invalid-opcode
                Replaces instructions whose opcode is valid for shader modules,
                but not for the current shader stage.  To have an effect, all
@@ -278,10 +292,12 @@ Options (in lexicographical order):
   --ssa-rewrite
                Replace loads and stores to function local variables with
                operations on SSA IDs.
-  --scalar-replacement
+  --scalar-replacement[=<n>]
                Replace aggregate function scope variables that are only accessed
                via their elements with new function variables representing each
-               element.
+               element.  <n> is a limit on the size of the aggragates that will
+               be replaced.  0 means there is no limit.  The default value is
+               100.
   --set-spec-const-default-value "<spec id>:<default value> ..."
                Set the default values of the specialization constants with
                <spec id>:<default value> pairs specified in a double-quoted
@@ -310,6 +326,10 @@ Options (in lexicographical order):
                prints CPU/WALL/USR/SYS time (and RSS if possible), but note that
                USR/SYS time are returned by getrusage() and can have a small
                error.
+  --vector-dce
+               This pass looks for components of vectors that are unused, and
+               removes them from the vector.  Note this would still leave around
+               lots of dead code that a pass of ADCE will be able to remove.
   --workaround-1209
                Rewrites instructions for which there are known driver bugs to
                avoid triggering those bugs.
@@ -397,6 +417,36 @@ OptStatus ParseOconfigFlag(const char* prog_name, const char* opt_flag,
   bool skip_validator = false;
   return ParseFlags(static_cast<int>(flags.size()), new_argv, optimizer,
                     in_file, out_file, nullptr, &skip_validator);
+}
+
+OptStatus ParseLoopFissionArg(int argc, const char** argv, int argi,
+                              Optimizer* optimizer) {
+  if (argi < argc) {
+    int register_threshold_to_split = atoi(argv[argi]);
+    optimizer->RegisterPass(CreateLoopFissionPass(
+        static_cast<size_t>(register_threshold_to_split)));
+    return {OPT_CONTINUE, 0};
+  }
+  fprintf(
+      stderr,
+      "error: --loop-fission must be followed by a positive integer value\n");
+  return {OPT_STOP, 1};
+}
+
+OptStatus ParseLoopFusionArg(int argc, const char** argv, int argi,
+                             Optimizer* optimizer) {
+  if (argi < argc) {
+    int max_registers_per_loop = atoi(argv[argi]);
+    if (max_registers_per_loop > 0) {
+      optimizer->RegisterPass(
+          CreateLoopFusionPass(static_cast<size_t>(max_registers_per_loop)));
+      return {OPT_CONTINUE, 0};
+    }
+  }
+  fprintf(stderr,
+          "error: --loop-loop-fusion must be followed by a positive "
+          "integer\n");
+  return {OPT_STOP, 1};
 }
 
 OptStatus ParseLoopUnrollPartialArg(int argc, const char** argv, int argi,
@@ -521,6 +571,9 @@ OptStatus ParseFlags(int argc, const char** argv, Optimizer* optimizer,
         optimizer->RegisterPass(CreateLoopUnswitchPass());
       } else if (0 == strcmp(cur_arg, "--scalar-replacement")) {
         optimizer->RegisterPass(CreateScalarReplacementPass());
+      } else if (0 == strncmp(cur_arg, "--scalar-replacement=", 21)) {
+        uint32_t limit = atoi(cur_arg + 21);
+        optimizer->RegisterPass(CreateScalarReplacementPass(limit));
       } else if (0 == strcmp(cur_arg, "--strength-reduction")) {
         optimizer->RegisterPass(CreateStrengthReductionPass());
       } else if (0 == strcmp(cur_arg, "--unify-const")) {
@@ -535,6 +588,8 @@ OptStatus ParseFlags(int argc, const char** argv, Optimizer* optimizer,
         optimizer->RegisterPass(CreateLocalRedundancyEliminationPass());
       } else if (0 == strcmp(cur_arg, "--loop-invariant-code-motion")) {
         optimizer->RegisterPass(CreateLoopInvariantCodeMotionPass());
+      } else if (0 == strcmp(cur_arg, "--reduce-load-size")) {
+        optimizer->RegisterPass(CreateReduceLoadSizePass());
       } else if (0 == strcmp(cur_arg, "--redundancy-elimination")) {
         optimizer->RegisterPass(CreateRedundancyEliminationPass());
       } else if (0 == strcmp(cur_arg, "--private-to-local")) {
@@ -553,8 +608,20 @@ OptStatus ParseFlags(int argc, const char** argv, Optimizer* optimizer,
         optimizer->RegisterPass(CreateSSARewritePass());
       } else if (0 == strcmp(cur_arg, "--copy-propagate-arrays")) {
         optimizer->RegisterPass(CreateCopyPropagateArraysPass());
+      } else if (0 == strcmp(cur_arg, "--loop-fission")) {
+        OptStatus status = ParseLoopFissionArg(argc, argv, ++argi, optimizer);
+        if (status.action != OPT_CONTINUE) {
+          return status;
+        }
+      } else if (0 == strcmp(cur_arg, "--loop-fusion")) {
+        OptStatus status = ParseLoopFusionArg(argc, argv, ++argi, optimizer);
+        if (status.action != OPT_CONTINUE) {
+          return status;
+        }
       } else if (0 == strcmp(cur_arg, "--loop-unroll")) {
         optimizer->RegisterPass(CreateLoopUnrollPass(true));
+      } else if (0 == strcmp(cur_arg, "--vector-dce")) {
+        optimizer->RegisterPass(CreateVectorDCEPass());
       } else if (0 == strcmp(cur_arg, "--loop-unroll-partial")) {
         OptStatus status =
             ParseLoopUnrollPartialArg(argc, argv, ++argi, optimizer);

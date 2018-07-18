@@ -28,7 +28,7 @@
 #include "source/spirv_endian.h"
 #include "source/text.h"
 #include "source/text_handler.h"
-#include "source/validate.h"
+#include "source/val/validate.h"
 #include "spirv-tools/libspirv.h"
 
 #include <gtest/gtest.h>
@@ -218,13 +218,13 @@ inline std::vector<spv_target_env> AllTargetEnvironments() {
       SPV_ENV_OPENGL_4_1,    SPV_ENV_OPENGL_4_2,
       SPV_ENV_OPENGL_4_3,    SPV_ENV_OPENGL_4_5,
       SPV_ENV_UNIVERSAL_1_2, SPV_ENV_UNIVERSAL_1_3,
-      SPV_ENV_VULKAN_1_1,
+      SPV_ENV_VULKAN_1_1,    SPV_ENV_WEBGPU_0,
   };
 }
 
 // Returns the capabilities in a CapabilitySet as an ordered vector.
 inline std::vector<SpvCapability> ElementsIn(
-    const libspirv::CapabilitySet& capabilities) {
+    const spvtools::CapabilitySet& capabilities) {
   std::vector<SpvCapability> result;
   capabilities.ForEach([&result](SpvCapability c) { result.push_back(c); });
   return result;

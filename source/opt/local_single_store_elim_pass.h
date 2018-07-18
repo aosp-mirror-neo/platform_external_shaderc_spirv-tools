@@ -34,15 +34,16 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class LocalSingleStoreElimPass : public Pass {
-  using cbb_ptr = const ir::BasicBlock*;
+  using cbb_ptr = const BasicBlock*;
 
  public:
   LocalSingleStoreElimPass();
-  const char* name() const override { return "eliminate-local-single-store"; }
-  Status Process(ir::IRContext* irContext) override;
 
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
+  const char* name() const override { return "eliminate-local-single-store"; }
+  Status Process() override;
+
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping;
   }
 
  private:
@@ -50,7 +51,7 @@ class LocalSingleStoreElimPass : public Pass {
   // with a single non-access-chain store in |func|. Replace all their
   // non-access-chain loads with the value that is stored and eliminate
   // any resulting dead code.
-  bool LocalSingleStoreElim(ir::Function* func);
+  bool LocalSingleStoreElim(Function* func);
 
   // Initialize extensions whitelist
   void InitExtensionWhiteList();
@@ -58,37 +59,35 @@ class LocalSingleStoreElimPass : public Pass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::IRContext* irContext);
   Pass::Status ProcessImpl();
 
   // If there is a single store to |var_inst|, and it covers the entire
   // variable, then replace all of the loads of the entire variable that are
   // dominated by the store by the value that was stored.  Returns true if the
   // module was changed.
-  bool ProcessVariable(ir::Instruction* var_inst);
+  bool ProcessVariable(Instruction* var_inst);
 
   // Collects all of the uses of |var_inst| into |uses|.  This looks through
   // OpObjectCopy's that copy the address of the variable, and collects those
   // uses as well.
-  void FindUses(const ir::Instruction* var_inst,
-                std::vector<ir::Instruction*>* uses) const;
+  void FindUses(const Instruction* var_inst,
+                std::vector<Instruction*>* uses) const;
 
   // Returns a store to |var_inst| if
   //   - it is a store to the entire variable,
   //   - and there are no other instructions that may modify |var_inst|.
-  ir::Instruction* FindSingleStoreAndCheckUses(
-      ir::Instruction* var_inst,
-      const std::vector<ir::Instruction*>& users) const;
+  Instruction* FindSingleStoreAndCheckUses(
+      Instruction* var_inst, const std::vector<Instruction*>& users) const;
 
   // Returns true if the address that results from |inst| may be used as a base
   // address in a store instruction or may be used to compute the base address
   // of a store instruction.
-  bool FeedsAStore(ir::Instruction* inst) const;
+  bool FeedsAStore(Instruction* inst) const;
 
   // Replaces all of the loads in |uses| by the value stored in |store_inst|.
   // The load instructions are then killed.
-  bool RewriteLoads(ir::Instruction* store_inst,
-                    const std::vector<ir::Instruction*>& uses);
+  bool RewriteLoads(Instruction* store_inst,
+                    const std::vector<Instruction*>& uses);
 
   // Extensions supported by this pass.
   std::unordered_set<std::string> extensions_whitelist_;

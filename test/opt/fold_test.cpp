@@ -29,15 +29,14 @@
 #include "pass_utils.h"
 #include "spirv-tools/libspirv.hpp"
 
+namespace spvtools {
+namespace opt {
 namespace {
 
 using ::testing::Contains;
 
-using namespace spvtools;
-using spvtools::opt::analysis::DefUseManager;
-
 #ifdef SPIRV_EFFCEE
-std::string Disassemble(const std::string& original, ir::IRContext* context,
+std::string Disassemble(const std::string& original, IRContext* context,
                         uint32_t disassemble_options = 0) {
   std::vector<uint32_t> optimized_bin;
   context->module()->ToBinary(&optimized_bin, true);
@@ -51,7 +50,7 @@ std::string Disassemble(const std::string& original, ir::IRContext* context,
   return optimized_asm;
 }
 
-void Match(const std::string& original, ir::IRContext* context,
+void Match(const std::string& original, IRContext* context,
            uint32_t disassemble_options = 0) {
   std::string disassembly = Disassemble(original, context, disassemble_options);
   auto match_result = effcee::Match(disassembly, original);
@@ -78,15 +77,15 @@ TEST_P(IntegerInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_TRUE(succeeded);
@@ -94,8 +93,8 @@ TEST_P(IntegerInstructionFoldingTest, Case) {
     EXPECT_EQ(inst->opcode(), SpvOpCopyObject);
     inst = def_use_mgr->GetDef(inst->GetSingleWordInOperand(0));
     EXPECT_EQ(inst->opcode(), SpvOpConstant);
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::IntConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::IntConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsIntConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -199,7 +198,6 @@ OpName %main "main"
 %104 = OpConstant %float 0 ; Need a def with an numerical id to define id maps.
 %float_null = OpConstantNull %float
 %float_0 = OpConstant %float 0
-%float_half = OpConstant %float 0.5
 %float_1 = OpConstant %float 1
 %float_2 = OpConstant %float 2
 %float_3 = OpConstant %float 3
@@ -446,15 +444,15 @@ TEST_P(IntVectorInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_TRUE(succeeded);
@@ -463,12 +461,11 @@ TEST_P(IntVectorInstructionFoldingTest, Case) {
     inst = def_use_mgr->GetDef(inst->GetSingleWordInOperand(0));
     std::vector<SpvOp> opcodes = {SpvOpConstantComposite};
     EXPECT_THAT(opcodes, Contains(inst->opcode()));
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::Constant* result =
-        const_mrg->GetConstantFromInst(inst);
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::Constant* result = const_mrg->GetConstantFromInst(inst);
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
-      const std::vector<const opt::analysis::Constant*>& componenets =
+      const std::vector<const analysis::Constant*>& componenets =
           result->AsVectorConstant()->GetComponents();
       EXPECT_EQ(componenets.size(), tc.expected_result.size());
       for (size_t i = 0; i < componenets.size(); i++) {
@@ -510,15 +507,15 @@ TEST_P(BooleanInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_TRUE(succeeded);
@@ -527,8 +524,8 @@ TEST_P(BooleanInstructionFoldingTest, Case) {
     inst = def_use_mgr->GetDef(inst->GetSingleWordInOperand(0));
     std::vector<SpvOp> bool_opcodes = {SpvOpConstantTrue, SpvOpConstantFalse};
     EXPECT_THAT(bool_opcodes, Contains(inst->opcode()));
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::BoolConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::BoolConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsBoolConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -1121,15 +1118,15 @@ TEST_P(FloatInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_TRUE(succeeded);
@@ -1137,8 +1134,8 @@ TEST_P(FloatInstructionFoldingTest, Case) {
     EXPECT_EQ(inst->opcode(), SpvOpCopyObject);
     inst = def_use_mgr->GetDef(inst->GetSingleWordInOperand(0));
     EXPECT_EQ(inst->opcode(), SpvOpConstant);
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::FloatConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::FloatConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsFloatConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -1268,15 +1265,15 @@ TEST_P(DoubleInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_TRUE(succeeded);
@@ -1284,8 +1281,8 @@ TEST_P(DoubleInstructionFoldingTest, Case) {
     EXPECT_EQ(inst->opcode(), SpvOpCopyObject);
     inst = def_use_mgr->GetDef(inst->GetSingleWordInOperand(0));
     EXPECT_EQ(inst->opcode(), SpvOpConstant);
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::FloatConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::FloatConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsFloatConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -2026,22 +2023,23 @@ TEST_P(IntegerInstructionFoldingTestWithMap, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  inst = opt::FoldInstructionToConstant(inst, tc.id_map);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  inst = context->get_instruction_folder().FoldInstructionToConstant(inst,
+                                                                     tc.id_map);
 
   // Make sure the instruction folded as expected.
   EXPECT_NE(inst, nullptr);
   if (inst != nullptr) {
     EXPECT_EQ(inst->opcode(), SpvOpConstant);
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::IntConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::IntConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsIntConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -2073,23 +2071,24 @@ TEST_P(BooleanInstructionFoldingTestWithMap, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  inst = opt::FoldInstructionToConstant(inst, tc.id_map);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  inst = context->get_instruction_folder().FoldInstructionToConstant(inst,
+                                                                     tc.id_map);
 
   // Make sure the instruction folded as expected.
   EXPECT_NE(inst, nullptr);
   if (inst != nullptr) {
     std::vector<SpvOp> bool_opcodes = {SpvOpConstantTrue, SpvOpConstantFalse};
     EXPECT_THAT(bool_opcodes, Contains(inst->opcode()));
-    opt::analysis::ConstantManager* const_mrg = context->get_constant_mgr();
-    const opt::analysis::BoolConstant* result =
+    analysis::ConstantManager* const_mrg = context->get_constant_mgr();
+    const analysis::BoolConstant* result =
         const_mrg->GetConstantFromInst(inst)->AsBoolConstant();
     EXPECT_NE(result, nullptr);
     if (result != nullptr) {
@@ -2122,16 +2121,16 @@ TEST_P(GeneralInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  std::unique_ptr<ir::Instruction> original_inst(inst->Clone(context.get()));
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  std::unique_ptr<Instruction> original_inst(inst->Clone(context.get()));
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_EQ(inst->result_id(), original_inst->result_id());
@@ -3628,16 +3627,16 @@ TEST_P(ToNegateFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  std::unique_ptr<ir::Instruction> original_inst(inst->Clone(context.get()));
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  std::unique_ptr<Instruction> original_inst(inst->Clone(context.get()));
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
 
   // Make sure the instruction folded as expected.
   EXPECT_EQ(inst->result_id(), original_inst->result_id());
@@ -3751,16 +3750,16 @@ TEST_P(MatchingInstructionFoldingTest, Case) {
   const auto& tc = GetParam();
 
   // Build module.
-  std::unique_ptr<ir::IRContext> context =
+  std::unique_ptr<IRContext> context =
       BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
                   SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   ASSERT_NE(nullptr, context);
 
   // Fold the instruction to test.
-  opt::analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
-  ir::Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
-  std::unique_ptr<ir::Instruction> original_inst(inst->Clone(context.get()));
-  bool succeeded = opt::FoldInstruction(inst);
+  analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
+  Instruction* inst = def_use_mgr->GetDef(tc.id_to_fold);
+  std::unique_ptr<Instruction> original_inst(inst->Clone(context.get()));
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
   EXPECT_EQ(succeeded, tc.expected_result);
   if (succeeded) {
     Match(tc.test_body, context.get());
@@ -5597,5 +5596,312 @@ INSTANTIATE_TEST_CASE_P(DotProductMatchingTest, MatchingInstructionFoldingTest,
             "OpFunctionEnd",
         3, true)
 ));
+
+using MatchingInstructionWithNoResultFoldingTest =
+::testing::TestWithParam<InstructionFoldingCase<bool>>;
+
+// Test folding instructions that do not have a result.  The instruction
+// that will be folded is the last instruction before the return.  If there
+// are multiple returns, there is not guarentee which one is used.
+TEST_P(MatchingInstructionWithNoResultFoldingTest, Case) {
+  const auto& tc = GetParam();
+
+  // Build module.
+  std::unique_ptr<IRContext> context =
+      BuildModule(SPV_ENV_UNIVERSAL_1_1, nullptr, tc.test_body,
+                  SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  ASSERT_NE(nullptr, context);
+
+  // Fold the instruction to test.
+  Instruction* inst = nullptr;
+  Function* func = &*context->module()->begin();
+  for(auto& bb : *func) {
+    Instruction* terminator = bb.terminator();
+    if (terminator->IsReturnOrAbort()) {
+      inst = terminator->PreviousNode();
+      break;
+    }
+  }
+  assert(inst && "Invalid test.  Could not find instruction to fold.");
+  std::unique_ptr<Instruction> original_inst(inst->Clone(context.get()));
+  bool succeeded = context->get_instruction_folder().FoldInstruction(inst);
+  EXPECT_EQ(succeeded, tc.expected_result);
+  if (succeeded) {
+    Match(tc.test_body, context.get());
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(StoreMatchingTest, MatchingInstructionWithNoResultFoldingTest,
+::testing::Values(
+    // Test case 0: Using OpDot to extract last element.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpLabel\n" +
+            "; CHECK-NOT: OpStore\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%n = OpVariable %_ptr_v4double Function\n" +
+            "%undef = OpUndef %v4double\n" +
+            "OpStore %n %undef\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        0 /* OpStore */, true)
+));
+
+INSTANTIATE_TEST_CASE_P(VectorShuffleMatchingTest, MatchingInstructionWithNoResultFoldingTest,
+::testing::Values(
+    // Test case 0: Basic test 1
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %7 %5 2 3 6 7\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %7 %8 2 3 4 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 1: Basic test 2
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %6 %7 0 1 4 5\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 2 3 4 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 2: Basic test 3
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %5 %7 3 2 4 5\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 1 0 4 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 3: Basic test 4
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %7 %6 2 3 5 4\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %7 %8 2 3 7 6\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 4: Don't fold, need both operands of the feeder.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %7 %8 2 3 7 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, false),
+    // Test case 5: Don't fold, need both operands of the feeder.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %6 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 2 0 7 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, false),
+    // Test case 6: Fold, need both operands of the feeder, but they are the same.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %5 %7 0 2 7 5\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %5 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 2 0 7 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 7: Fold, need both operands of the feeder, but they are the same.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %7 %5 2 0 5 7\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %5 2 3 4 5\n" +
+            "%9 = OpVectorShuffle %v4double %7 %8 2 0 7 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 8: Replace first operand with a smaller vector.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %5 %7 0 0 5 3\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v2double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v2double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v4double %5 %5 0 1 2 3\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 2 0 7 5\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 9: Replace first operand with a larger vector.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %5 %7 3 0 7 5\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v2double %5 %5 0 3\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 1 0 5 3\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 10: Replace unused operand with null.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: [[double:%\\w+]] = OpTypeFloat 64\n" +
+            "; CHECK: [[v4double:%\\w+]] = OpTypeVector [[double]] 2\n" +
+            "; CHECK: [[null:%\\w+]] = OpConstantNull [[v4double]]\n" +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} [[null]] %7 4 2 5 3\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v2double %5 %5 0 3\n" +
+            "%9 = OpVectorShuffle %v4double %8 %7 4 2 5 3\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 11: Replace unused operand with null.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: [[double:%\\w+]] = OpTypeFloat 64\n" +
+            "; CHECK: [[v4double:%\\w+]] = OpTypeVector [[double]] 2\n" +
+            "; CHECK: [[null:%\\w+]] = OpConstantNull [[v4double]]\n" +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} [[null]] %5 2 2 5 5\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%8 = OpVectorShuffle %v2double %5 %5 0 3\n" +
+            "%9 = OpVectorShuffle %v4double %8 %8 2 2 3 3\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true),
+    // Test case 12: Replace unused operand with null.
+    InstructionFoldingCase<bool>(
+        Header() +
+            "; CHECK: [[double:%\\w+]] = OpTypeFloat 64\n" +
+            "; CHECK: [[v4double:%\\w+]] = OpTypeVector [[double]] 2\n" +
+            "; CHECK: [[null:%\\w+]] = OpConstantNull [[v4double]]\n" +
+            "; CHECK: OpVectorShuffle\n" +
+            "; CHECK: OpVectorShuffle {{%\\w+}} %7 [[null]] 2 0 1 3\n" +
+            "; CHECK: OpReturn\n" +
+            "%main = OpFunction %void None %void_func\n" +
+            "%main_lab = OpLabel\n" +
+            "%2 = OpVariable %_ptr_v4double Function\n" +
+            "%3 = OpVariable %_ptr_v4double Function\n" +
+            "%4 = OpVariable %_ptr_v4double Function\n" +
+            "%5 = OpLoad %v4double %2\n" +
+            "%6 = OpLoad %v4double %3\n" +
+            "%7 = OpLoad %v4double %4\n" +
+            "%8 = OpVectorShuffle %v2double %5 %5 0 3\n" +
+            "%9 = OpVectorShuffle %v4double %7 %8 2 0 1 3\n" +
+            "OpReturn\n" +
+            "OpFunctionEnd",
+        9, true)
+));
 #endif
-}  // anonymous namespace
+
+}  // namespace
+}  // namespace opt
+}  // namespace spvtools

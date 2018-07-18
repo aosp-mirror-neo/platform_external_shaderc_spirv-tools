@@ -26,18 +26,7 @@
 namespace spvtools {
 namespace opt {
 
-Pass::Status FoldSpecConstantOpAndCompositePass::Process(
-    ir::IRContext* irContext) {
-  Initialize(irContext);
-  return ProcessImpl(irContext);
-}
-
-void FoldSpecConstantOpAndCompositePass::Initialize(ir::IRContext* irContext) {
-  InitializeProcessing(irContext);
-}
-
-Pass::Status FoldSpecConstantOpAndCompositePass::ProcessImpl(
-    ir::IRContext* irContext) {
+Pass::Status FoldSpecConstantOpAndCompositePass::Process() {
   bool modified = false;
   // Traverse through all the constant defining instructions. For Normal
   // Constants whose values are determined and do not depend on OpUndef
@@ -59,13 +48,13 @@ Pass::Status FoldSpecConstantOpAndCompositePass::ProcessImpl(
   // the dependee Spec Constants, all its dependent constants must have been
   // processed and all its dependent Spec Constants should have been folded if
   // possible.
-  ir::Module::inst_iterator next_inst = irContext->types_values_begin();
-  for (ir::Module::inst_iterator inst_iter = next_inst;
+  Module::inst_iterator next_inst = context()->types_values_begin();
+  for (Module::inst_iterator inst_iter = next_inst;
        // Need to re-evaluate the end iterator since we may modify the list of
        // instructions in this section of the module as the process goes.
-       inst_iter != irContext->types_values_end(); inst_iter = next_inst) {
+       inst_iter != context()->types_values_end(); inst_iter = next_inst) {
     ++next_inst;
-    ir::Instruction* inst = &*inst_iter;
+    Instruction* inst = &*inst_iter;
     // Collect constant values of normal constants and process the
     // OpSpecConstantOp and OpSpecConstantComposite instructions if possible.
     // The constant values will be stored in analysis::Constant instances.
@@ -121,9 +110,9 @@ Pass::Status FoldSpecConstantOpAndCompositePass::ProcessImpl(
 }
 
 bool FoldSpecConstantOpAndCompositePass::ProcessOpSpecConstantOp(
-    ir::Module::inst_iterator* pos) {
-  ir::Instruction* inst = &**pos;
-  ir::Instruction* folded_inst = nullptr;
+    Module::inst_iterator* pos) {
+  Instruction* inst = &**pos;
+  Instruction* folded_inst = nullptr;
   assert(inst->GetInOperand(0).type ==
              SPV_OPERAND_TYPE_SPEC_CONSTANT_OP_NUMBER &&
          "The first in-operand of OpSpecContantOp instruction must be of "
@@ -161,16 +150,16 @@ bool FoldSpecConstantOpAndCompositePass::ProcessOpSpecConstantOp(
 
 uint32_t FoldSpecConstantOpAndCompositePass::GetTypeComponent(
     uint32_t typeId, uint32_t element) const {
-  ir::Instruction* type = context()->get_def_use_mgr()->GetDef(typeId);
+  Instruction* type = context()->get_def_use_mgr()->GetDef(typeId);
   uint32_t subtype = type->GetTypeComponent(element);
   assert(subtype != 0);
 
   return subtype;
 }
 
-ir::Instruction* FoldSpecConstantOpAndCompositePass::DoCompositeExtract(
-    ir::Module::inst_iterator* pos) {
-  ir::Instruction* inst = &**pos;
+Instruction* FoldSpecConstantOpAndCompositePass::DoCompositeExtract(
+    Module::inst_iterator* pos) {
+  Instruction* inst = &**pos;
   assert(inst->NumInOperands() - 1 >= 2 &&
          "OpSpecConstantOp CompositeExtract requires at least two non-type "
          "non-opcode operands.");
@@ -218,9 +207,9 @@ ir::Instruction* FoldSpecConstantOpAndCompositePass::DoCompositeExtract(
       current_const, pos);
 }
 
-ir::Instruction* FoldSpecConstantOpAndCompositePass::DoVectorShuffle(
-    ir::Module::inst_iterator* pos) {
-  ir::Instruction* inst = &**pos;
+Instruction* FoldSpecConstantOpAndCompositePass::DoVectorShuffle(
+    Module::inst_iterator* pos) {
+  Instruction* inst = &**pos;
   analysis::Vector* result_vec_type =
       context()->get_constant_mgr()->GetType(inst)->AsVector();
   assert(inst->NumInOperands() - 1 > 2 &&
@@ -323,9 +312,9 @@ bool IsValidTypeForComponentWiseOperation(const analysis::Type* type) {
 }
 }  // namespace
 
-ir::Instruction* FoldSpecConstantOpAndCompositePass::DoComponentWiseOperation(
-    ir::Module::inst_iterator* pos) {
-  const ir::Instruction* inst = &**pos;
+Instruction* FoldSpecConstantOpAndCompositePass::DoComponentWiseOperation(
+    Module::inst_iterator* pos) {
+  const Instruction* inst = &**pos;
   const analysis::Type* result_type =
       context()->get_constant_mgr()->GetType(inst);
   SpvOp spec_opcode = static_cast<SpvOp>(inst->GetSingleWordInOperand(0));
@@ -333,8 +322,7 @@ ir::Instruction* FoldSpecConstantOpAndCompositePass::DoComponentWiseOperation(
   std::vector<const analysis::Constant*> operands;
 
   if (!std::all_of(
-          inst->cbegin(), inst->cend(),
-          [&operands, this](const ir::Operand& o) {
+          inst->cbegin(), inst->cend(), [&operands, this](const Operand& o) {
             // skip the operands that is not an id.
             if (o.type != spv_operand_type_t::SPV_OPERAND_TYPE_ID) return true;
             uint32_t id = o.words.front();
@@ -351,7 +339,8 @@ ir::Instruction* FoldSpecConstantOpAndCompositePass::DoComponentWiseOperation(
 
   if (result_type->AsInteger() || result_type->AsBool()) {
     // Scalar operation
-    uint32_t result_val = FoldScalars(spec_opcode, operands);
+    uint32_t result_val =
+        context()->get_instruction_folder().FoldScalars(spec_opcode, operands);
     auto result_const =
         context()->get_constant_mgr()->GetConstant(result_type, {result_val});
     return context()->get_constant_mgr()->BuildInstructionAndAddToModule(
@@ -362,7 +351,8 @@ ir::Instruction* FoldSpecConstantOpAndCompositePass::DoComponentWiseOperation(
         result_type->AsVector()->element_type();
     uint32_t num_dims = result_type->AsVector()->element_count();
     std::vector<uint32_t> result_vec =
-        FoldVectors(spec_opcode, num_dims, operands);
+        context()->get_instruction_folder().FoldVectors(spec_opcode, num_dims,
+                                                        operands);
     std::vector<const analysis::Constant*> result_vector_components;
     for (uint32_t r : result_vec) {
       if (auto rc =

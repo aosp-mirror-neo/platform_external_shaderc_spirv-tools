@@ -34,7 +34,8 @@ using std::pair;
 using std::tie;
 using std::vector;
 
-namespace libspirv {
+namespace spvtools {
+namespace val {
 
 // Universal Limit of ResultID + 1
 static const uint32_t kInvalidId = 0x400000;
@@ -275,7 +276,7 @@ void Function::ComputeAugmentedCFG() {
   // the predecessors of the pseudo exit block.
   auto succ_func = [](const BasicBlock* b) { return b->successors(); };
   auto pred_func = [](const BasicBlock* b) { return b->predecessors(); };
-  spvtools::CFA<BasicBlock>::ComputeAugmentedCFG(
+  CFA<BasicBlock>::ComputeAugmentedCFG(
       ordered_blocks_, &pseudo_entry_block_, &pseudo_exit_block_,
       &augmented_successors_map_, &augmented_predecessors_map_, succ_func,
       pred_func);
@@ -386,4 +387,5 @@ bool Function::IsCompatibleWithExecutionModel(SpvExecutionModel model,
   return return_value;
 }
 
-}  // namespace libspirv
+}  // namespace val
+}  // namespace spvtools

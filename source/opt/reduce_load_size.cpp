@@ -29,12 +29,11 @@ const double kThreshold = 0.9;
 namespace spvtools {
 namespace opt {
 
-Pass::Status ReduceLoadSize::Process(ir::IRContext* ctx) {
-  InitializeProcessing(ctx);
+Pass::Status ReduceLoadSize::Process() {
   bool modified = false;
 
   for (auto& func : *get_module()) {
-    func.ForEachInst([&modified, this](ir::Instruction* inst) {
+    func.ForEachInst([&modified, this](Instruction* inst) {
       if (inst->opcode() == SpvOpCompositeExtract) {
         if (ShouldReplaceExtract(inst)) {
           modified |= ReplaceExtract(inst);
@@ -46,16 +45,16 @@ Pass::Status ReduceLoadSize::Process(ir::IRContext* ctx) {
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-bool ReduceLoadSize::ReplaceExtract(ir::Instruction* inst) {
+bool ReduceLoadSize::ReplaceExtract(Instruction* inst) {
   assert(inst->opcode() == SpvOpCompositeExtract &&
          "Wrong opcode.  Should be OpCompositeExtract.");
-  analysis::DefUseManager* def_use_mgr = inst->context()->get_def_use_mgr();
-  analysis::TypeManager* type_mgr = inst->context()->get_type_mgr();
-  analysis::ConstantManager* const_mgr = inst->context()->get_constant_mgr();
+  analysis::DefUseManager* def_use_mgr = context()->get_def_use_mgr();
+  analysis::TypeManager* type_mgr = context()->get_type_mgr();
+  analysis::ConstantManager* const_mgr = context()->get_constant_mgr();
 
   uint32_t composite_id =
       inst->GetSingleWordInOperand(kExtractCompositeIdInIdx);
-  ir::Instruction* composite_inst = def_use_mgr->GetDef(composite_id);
+  Instruction* composite_inst = def_use_mgr->GetDef(composite_id);
 
   if (composite_inst->opcode() != SpvOpLoad) {
     return false;
@@ -67,7 +66,7 @@ bool ReduceLoadSize::ReplaceExtract(ir::Instruction* inst) {
     return false;
   }
 
-  ir::Instruction* var = composite_inst->GetBaseAddress();
+  Instruction* var = composite_inst->GetBaseAddress();
   if (var == nullptr || var->opcode() != SpvOpVariable) {
     return false;
   }
@@ -86,9 +85,9 @@ bool ReduceLoadSize::ReplaceExtract(ir::Instruction* inst) {
   // Create a new access chain and load just after the old load.
   // We cannot create the new access chain load in the position of the extract
   // because the storage may have been written to in between.
-  InstructionBuilder ir_builder(inst->context(), composite_inst,
-                                ir::IRContext::kAnalysisInstrToBlockMapping |
-                                    ir::IRContext::kAnalysisDefUse);
+  InstructionBuilder ir_builder(
+      inst->context(), composite_inst,
+      IRContext::kAnalysisInstrToBlockMapping | IRContext::kAnalysisDefUse);
 
   uint32_t pointer_to_result_type_id =
       type_mgr->FindPointerToType(inst->type_id(), storage_class);
@@ -105,10 +104,10 @@ bool ReduceLoadSize::ReplaceExtract(ir::Instruction* inst) {
     ids.push_back(const_mgr->GetDefiningInstruction(index_const)->result_id());
   }
 
-  ir::Instruction* new_access_chain = ir_builder.AddAccessChain(
+  Instruction* new_access_chain = ir_builder.AddAccessChain(
       pointer_to_result_type_id,
       composite_inst->GetSingleWordInOperand(kLoadPointerInIdx), ids);
-  ir::Instruction* new_laod =
+  Instruction* new_laod =
       ir_builder.AddLoad(inst->type_id(), new_access_chain->result_id());
 
   context()->ReplaceAllUsesWith(inst->result_id(), new_laod->result_id());
@@ -116,9 +115,9 @@ bool ReduceLoadSize::ReplaceExtract(ir::Instruction* inst) {
   return true;
 }
 
-bool ReduceLoadSize::ShouldReplaceExtract(ir::Instruction* inst) {
+bool ReduceLoadSize::ShouldReplaceExtract(Instruction* inst) {
   analysis::DefUseManager* def_use_mgr = context()->get_def_use_mgr();
-  ir::Instruction* op_inst = def_use_mgr->GetDef(
+  Instruction* op_inst = def_use_mgr->GetDef(
       inst->GetSingleWordInOperand(kExtractCompositeIdInIdx));
 
   if (op_inst->opcode() != SpvOpLoad) {
@@ -133,8 +132,8 @@ bool ReduceLoadSize::ShouldReplaceExtract(ir::Instruction* inst) {
   bool all_elements_used = false;
   std::set<uint32_t> elements_used;
 
-  all_elements_used = !def_use_mgr->WhileEachUser(
-      op_inst, [&elements_used](ir::Instruction* use) {
+  all_elements_used =
+      !def_use_mgr->WhileEachUser(op_inst, [&elements_used](Instruction* use) {
         if (use->opcode() != SpvOpCompositeExtract) {
           return false;
         }

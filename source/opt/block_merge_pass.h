@@ -38,27 +38,31 @@ class BlockMergePass : public Pass {
  public:
   BlockMergePass();
   const char* name() const override { return "merge-blocks"; }
-  Status Process(ir::IRContext*) override;
+  Status Process() override;
+
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse |
+           IRContext::kAnalysisInstrToBlockMapping |
+           IRContext::kAnalysisDecorations | IRContext::kAnalysisCombinators |
+           IRContext::kAnalysisNameMap;
+  }
 
  private:
   // Kill any OpName instruction referencing |inst|, then kill |inst|.
-  void KillInstAndName(ir::Instruction* inst);
+  void KillInstAndName(Instruction* inst);
 
   // Search |func| for blocks which have a single Branch to a block
   // with no other predecessors. Merge these blocks into a single block.
-  bool MergeBlocks(ir::Function* func);
+  bool MergeBlocks(Function* func);
 
   // Returns true if |block| (or |id|) contains a merge instruction.
-  bool IsHeader(ir::BasicBlock* block);
+  bool IsHeader(BasicBlock* block);
   bool IsHeader(uint32_t id);
 
   // Returns true if |block| (or |id|) is the merge target of a merge
   // instruction.
-  bool IsMerge(ir::BasicBlock* block);
+  bool IsMerge(BasicBlock* block);
   bool IsMerge(uint32_t id);
-
-  void Initialize(ir::IRContext* c);
-  Pass::Status ProcessImpl();
 };
 
 }  // namespace opt

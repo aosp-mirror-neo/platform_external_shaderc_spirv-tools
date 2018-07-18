@@ -23,15 +23,10 @@
 namespace spvtools {
 namespace opt {
 
-using ir::Instruction;
-using ir::Operand;
-
 using Words = std::vector<uint32_t>;
 using OrderedUsesMap = std::unordered_map<uint32_t, Words>;
 
-Pass::Status FlattenDecorationPass::Process(ir::IRContext* c) {
-  InitializeProcessing(c);
-
+Pass::Status FlattenDecorationPass::Process() {
   bool modified = false;
 
   // The target Id of OpDecorationGroup instructions.

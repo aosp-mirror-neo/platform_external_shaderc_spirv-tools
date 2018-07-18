@@ -25,16 +25,13 @@ namespace opt {
 class CFGCleanupPass : public MemPass {
  public:
   CFGCleanupPass() = default;
+
   const char* name() const override { return "cfg-cleanup"; }
-  Status Process(ir::IRContext* c) override;
+  Status Process() override;
 
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse;
   }
-
- private:
-  // Initialize the pass.
-  void Initialize(ir::IRContext* c);
 };
 
 }  // namespace opt

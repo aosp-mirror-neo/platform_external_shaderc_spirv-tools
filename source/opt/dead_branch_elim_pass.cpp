@@ -34,7 +34,7 @@ const uint32_t kBranchCondFalseLabIdInIdx = 2;
 
 bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
   bool condIsConst;
-  ir::Instruction* cInst = get_def_use_mgr()->GetDef(condId);
+  Instruction* cInst = get_def_use_mgr()->GetDef(condId);
   switch (cInst->opcode()) {
     case SpvOpConstantFalse: {
       *condVal = false;
@@ -56,9 +56,9 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
 }
 
 bool DeadBranchElimPass::GetConstInteger(uint32_t selId, uint32_t* selVal) {
-  ir::Instruction* sInst = get_def_use_mgr()->GetDef(selId);
+  Instruction* sInst = get_def_use_mgr()->GetDef(selId);
   uint32_t typeId = sInst->type_id();
-  ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
+  Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
   if (!typeInst || (typeInst->opcode() != SpvOpTypeInt)) return false;
   // TODO(greg-lunarg): Support non-32 bit ints
   if (typeInst->GetSingleWordInOperand(0) != 32) return false;
@@ -72,27 +72,28 @@ bool DeadBranchElimPass::GetConstInteger(uint32_t selId, uint32_t* selVal) {
   return false;
 }
 
-void DeadBranchElimPass::AddBranch(uint32_t labelId, ir::BasicBlock* bp) {
+void DeadBranchElimPass::AddBranch(uint32_t labelId, BasicBlock* bp) {
   assert(get_def_use_mgr()->GetDef(labelId) != nullptr);
-  std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
-      context(), SpvOpBranch, 0, 0,
-      {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {labelId}}}));
-  get_def_use_mgr()->AnalyzeInstDefUse(&*newBranch);
+  std::unique_ptr<Instruction> newBranch(
+      new Instruction(context(), SpvOpBranch, 0, 0,
+                      {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {labelId}}}));
+  context()->AnalyzeDefUse(&*newBranch);
+  context()->set_instr_block(&*newBranch, bp);
   bp->AddInstruction(std::move(newBranch));
 }
 
-ir::BasicBlock* DeadBranchElimPass::GetParentBlock(uint32_t id) {
+BasicBlock* DeadBranchElimPass::GetParentBlock(uint32_t id) {
   return context()->get_instr_block(get_def_use_mgr()->GetDef(id));
 }
 
 bool DeadBranchElimPass::MarkLiveBlocks(
-    ir::Function* func, std::unordered_set<ir::BasicBlock*>* live_blocks) {
-  std::unordered_set<ir::BasicBlock*> continues;
-  std::vector<ir::BasicBlock*> stack;
+    Function* func, std::unordered_set<BasicBlock*>* live_blocks) {
+  std::unordered_set<BasicBlock*> continues;
+  std::vector<BasicBlock*> stack;
   stack.push_back(&*func->begin());
   bool modified = false;
   while (!stack.empty()) {
-    ir::BasicBlock* block = stack.back();
+    BasicBlock* block = stack.back();
     stack.pop_back();
 
     // Live blocks doubles as visited set.
@@ -101,7 +102,7 @@ bool DeadBranchElimPass::MarkLiveBlocks(
     uint32_t cont_id = block->ContinueBlockIdIfAny();
     if (cont_id != 0) continues.insert(GetParentBlock(cont_id));
 
-    ir::Instruction* terminator = block->terminator();
+    Instruction* terminator = block->terminator();
     uint32_t live_lab_id = 0;
     // Check if the terminator has a single valid successor.
     if (terminator->opcode() == SpvOpBranchConditional) {
@@ -152,7 +153,7 @@ bool DeadBranchElimPass::MarkLiveBlocks(
       // Remove the merge instruction if it is a selection merge.
       AddBranch(live_lab_id, block);
       context()->KillInst(terminator);
-      ir::Instruction* mergeInst = block->GetMergeInst();
+      Instruction* mergeInst = block->GetMergeInst();
       if (mergeInst && mergeInst->opcode() == SpvOpSelectionMerge) {
         context()->KillInst(mergeInst);
       }
@@ -170,18 +171,17 @@ bool DeadBranchElimPass::MarkLiveBlocks(
 }
 
 void DeadBranchElimPass::MarkUnreachableStructuredTargets(
-    const std::unordered_set<ir::BasicBlock*>& live_blocks,
-    std::unordered_set<ir::BasicBlock*>* unreachable_merges,
-    std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>*
-        unreachable_continues) {
+    const std::unordered_set<BasicBlock*>& live_blocks,
+    std::unordered_set<BasicBlock*>* unreachable_merges,
+    std::unordered_map<BasicBlock*, BasicBlock*>* unreachable_continues) {
   for (auto block : live_blocks) {
     if (auto merge_id = block->MergeBlockIdIfAny()) {
-      ir::BasicBlock* merge_block = GetParentBlock(merge_id);
+      BasicBlock* merge_block = GetParentBlock(merge_id);
       if (!live_blocks.count(merge_block)) {
         unreachable_merges->insert(merge_block);
       }
       if (auto cont_id = block->ContinueBlockIdIfAny()) {
-        ir::BasicBlock* cont_block = GetParentBlock(cont_id);
+        BasicBlock* cont_block = GetParentBlock(cont_id);
         if (!live_blocks.count(cont_block)) {
           (*unreachable_continues)[cont_block] = block;
         }
@@ -191,9 +191,8 @@ void DeadBranchElimPass::MarkUnreachableStructuredTargets(
 }
 
 bool DeadBranchElimPass::FixPhiNodesInLiveBlocks(
-    ir::Function* func, const std::unordered_set<ir::BasicBlock*>& live_blocks,
-    const std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>&
-        unreachable_continues) {
+    Function* func, const std::unordered_set<BasicBlock*>& live_blocks,
+    const std::unordered_map<BasicBlock*, BasicBlock*>& unreachable_continues) {
   bool modified = false;
   for (auto& block : *func) {
     if (live_blocks.count(&block)) {
@@ -204,8 +203,8 @@ bool DeadBranchElimPass::FixPhiNodesInLiveBlocks(
 
         bool changed = false;
         bool backedge_added = false;
-        ir::Instruction* inst = &*iter;
-        std::vector<ir::Operand> operands;
+        Instruction* inst = &*iter;
+        std::vector<Operand> operands;
         // Build a complete set of operands (not just input operands). Start
         // with type and result id operands.
         operands.push_back(inst->GetOperand(0u));
@@ -218,7 +217,7 @@ bool DeadBranchElimPass::FixPhiNodesInLiveBlocks(
         // However, if there is only one other incoming edge, the OpPhi can be
         // eliminated.
         for (uint32_t i = 1; i < inst->NumInOperands(); i += 2) {
-          ir::BasicBlock* inc = GetParentBlock(inst->GetSingleWordInOperand(i));
+          BasicBlock* inc = GetParentBlock(inst->GetSingleWordInOperand(i));
           auto cont_iter = unreachable_continues.find(inc);
           if (cont_iter != unreachable_continues.end() &&
               cont_iter->second == &block && inst->NumInOperands() > 4) {
@@ -301,10 +300,9 @@ bool DeadBranchElimPass::FixPhiNodesInLiveBlocks(
 }
 
 bool DeadBranchElimPass::EraseDeadBlocks(
-    ir::Function* func, const std::unordered_set<ir::BasicBlock*>& live_blocks,
-    const std::unordered_set<ir::BasicBlock*>& unreachable_merges,
-    const std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>&
-        unreachable_continues) {
+    Function* func, const std::unordered_set<BasicBlock*>& live_blocks,
+    const std::unordered_set<BasicBlock*>& unreachable_merges,
+    const std::unordered_map<BasicBlock*, BasicBlock*>& unreachable_continues) {
   bool modified = false;
   for (auto ebi = func->begin(); ebi != func->end();) {
     if (unreachable_merges.count(&*ebi)) {
@@ -314,8 +312,9 @@ bool DeadBranchElimPass::EraseDeadBlocks(
         KillAllInsts(&*ebi, false);
         // Add unreachable terminator.
         ebi->AddInstruction(
-            MakeUnique<ir::Instruction>(context(), SpvOpUnreachable, 0, 0,
-                                        std::initializer_list<ir::Operand>{}));
+            MakeUnique<Instruction>(context(), SpvOpUnreachable, 0, 0,
+                                    std::initializer_list<Operand>{}));
+        context()->set_instr_block(&*ebi->tail(), &*ebi);
         modified = true;
       }
       ++ebi;
@@ -328,11 +327,11 @@ bool DeadBranchElimPass::EraseDeadBlocks(
         KillAllInsts(&*ebi, false);
         // Add unconditional branch to header.
         assert(unreachable_continues.count(&*ebi));
-        ebi->AddInstruction(
-            MakeUnique<ir::Instruction>(context(), SpvOpBranch, 0, 0,
-                                        std::initializer_list<ir::Operand>{
-                                            {SPV_OPERAND_TYPE_ID, {cont_id}}}));
+        ebi->AddInstruction(MakeUnique<Instruction>(
+            context(), SpvOpBranch, 0, 0,
+            std::initializer_list<Operand>{{SPV_OPERAND_TYPE_ID, {cont_id}}}));
         get_def_use_mgr()->AnalyzeInstUse(&*ebi->tail());
+        context()->set_instr_block(&*ebi->tail(), &*ebi);
         modified = true;
       }
       ++ebi;
@@ -349,13 +348,13 @@ bool DeadBranchElimPass::EraseDeadBlocks(
   return modified;
 }
 
-bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
+bool DeadBranchElimPass::EliminateDeadBranches(Function* func) {
   bool modified = false;
-  std::unordered_set<ir::BasicBlock*> live_blocks;
+  std::unordered_set<BasicBlock*> live_blocks;
   modified |= MarkLiveBlocks(func, &live_blocks);
 
-  std::unordered_set<ir::BasicBlock*> unreachable_merges;
-  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*> unreachable_continues;
+  std::unordered_set<BasicBlock*> unreachable_merges;
+  std::unordered_map<BasicBlock*, BasicBlock*> unreachable_continues;
   MarkUnreachableStructuredTargets(live_blocks, &unreachable_merges,
                                    &unreachable_continues);
   modified |= FixPhiNodesInLiveBlocks(func, live_blocks, unreachable_continues);
@@ -365,29 +364,18 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
   return modified;
 }
 
-void DeadBranchElimPass::Initialize(ir::IRContext* c) {
-  InitializeProcessing(c);
-}
-
-Pass::Status DeadBranchElimPass::ProcessImpl() {
+Pass::Status DeadBranchElimPass::Process() {
   // Do not process if module contains OpGroupDecorate. Additional
   // support required in KillNamesAndDecorates().
   // TODO(greg-lunarg): Add support for OpGroupDecorate
   for (auto& ai : get_module()->annotations())
     if (ai.opcode() == SpvOpGroupDecorate) return Status::SuccessWithoutChange;
   // Process all entry point functions
-  ProcessFunction pfn = [this](ir::Function* fp) {
+  ProcessFunction pfn = [this](Function* fp) {
     return EliminateDeadBranches(fp);
   };
   bool modified = ProcessReachableCallTree(pfn, context());
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
-}
-
-DeadBranchElimPass::DeadBranchElimPass() {}
-
-Pass::Status DeadBranchElimPass::Process(ir::IRContext* module) {
-  Initialize(module);
-  return ProcessImpl();
 }
 
 }  // namespace opt

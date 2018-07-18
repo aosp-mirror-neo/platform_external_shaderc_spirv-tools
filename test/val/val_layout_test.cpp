@@ -24,6 +24,10 @@
 #include "unit_spirv.h"
 #include "val_fixtures.h"
 
+namespace spvtools {
+namespace val {
+namespace {
+
 using std::function;
 using std::ostream;
 using std::ostream_iterator;
@@ -34,7 +38,6 @@ using std::tie;
 using std::tuple;
 using std::vector;
 
-using libspirv::spvResultToString;
 using ::testing::Eq;
 using ::testing::HasSubstr;
 using ::testing::StrEq;
@@ -42,8 +45,6 @@ using ::testing::StrEq;
 using pred_type = function<spv_result_t(int)>;
 using ValidateLayout =
     spvtest::ValidateBase<tuple<int, tuple<string, pred_type, pred_type>>>;
-
-namespace {
 
 // returns true if order is equal to VAL
 template <int VAL, spv_result_t RET = SPV_ERROR_INVALID_LAYOUT>
@@ -134,38 +135,38 @@ INSTANTIATE_TEST_CASE_P(InstructionsOrder,
     // validation error. Therefore, "Lines to compile" for some instructions
     // are not "All" in the below.
     //
-    //                                   | Instruction                | Line(s) valid          | Lines to compile
-    ::testing::Values( make_tuple(string("OpCapability")              , Equals<0>              , Range<0, 2>())
-                     , make_tuple(string("OpExtension")               , Equals<1>              , All)
-                     , make_tuple(string("OpExtInstImport")           , Equals<2>              , All)
-                     , make_tuple(string("OpMemoryModel")             , Equals<3>              , Range<1, kRangeEnd>())
-                     , make_tuple(string("OpEntryPoint")              , Equals<4>              , All)
-                     , make_tuple(string("OpExecutionMode ")          , Range<5, 6>()          , All)
-                     , make_tuple(string("OpExecutionModeId")         , Range<5, 6>()          , All)
-                     , make_tuple(string("OpSource ")                 , Range<7, 11>()         , Range<8, kRangeEnd>())
-                     , make_tuple(string("OpSourceContinued ")        , Range<7, 11>()         , All)
-                     , make_tuple(string("OpSourceExtension ")        , Range<7, 11>()         , All)
-                     , make_tuple(string("%str2 = OpString ")         , Range<7, 11>()         , All)
-                     , make_tuple(string("OpName ")                   , Range<12, 13>()        , All)
-                     , make_tuple(string("OpMemberName ")             , Range<12, 13>()        , All)
-                     , make_tuple(string("OpDecorate ")               , Range<14, 17>()        , All)
-                     , make_tuple(string("OpMemberDecorate ")         , Range<14, 17>()        , All)
-                     , make_tuple(string("OpGroupDecorate ")          , Range<14, 17>()        , Range<17, kRangeEnd>())
-                     , make_tuple(string("OpDecorationGroup")         , Range<14, 17>()        , Range<0, 16>())
-                     , make_tuple(string("OpTypeBool")                , Range<18, 31>()        , All)
-                     , make_tuple(string("OpTypeVoid")                , Range<18, 31>()        , Range<0, 26>())
-                     , make_tuple(string("OpTypeFloat")               , Range<18, 31>()        , Range<0,21>())
-                     , make_tuple(string("OpTypeInt")                 , Range<18, 31>()        , Range<0, 21>())
-                     , make_tuple(string("OpTypeVector %floatt 4")    , Range<18, 31>()        , Range<20, 24>())
-                     , make_tuple(string("OpTypeMatrix %vec4 4")      , Range<18, 31>()        , Range<23, kRangeEnd>())
-                     , make_tuple(string("OpTypeStruct")              , Range<18, 31>()        , Range<25, kRangeEnd>())
-                     , make_tuple(string("%vfunct   = OpTypeFunction"), Range<18, 31>()        , Range<21, 31>())
-                     , make_tuple(string("OpConstant")                , Range<18, 31>()        , Range<21, kRangeEnd>())
-                     , make_tuple(string("OpLine ")                   , Range<18, kRangeEnd>() , Range<8, kRangeEnd>())
-                     , make_tuple(string("OpNoLine")                  , Range<18, kRangeEnd>() , All)
-                     , make_tuple(string("%fLabel   = OpLabel")       , Equals<39>             , All)
-                     , make_tuple(string("OpNop")                     , Equals<40>             , Range<40,kRangeEnd>())
-                     , make_tuple(string("OpReturn ; %func2 return")  , Equals<41>             , All)
+    //                                  | Instruction                | Line(s) valid          | Lines to compile
+    ::testing::Values(make_tuple(string("OpCapability")              , Equals<0>              , Range<0, 2>())
+                    , make_tuple(string("OpExtension")               , Equals<1>              , All)
+                    , make_tuple(string("OpExtInstImport")           , Equals<2>              , All)
+                    , make_tuple(string("OpMemoryModel")             , Equals<3>              , Range<1, kRangeEnd>())
+                    , make_tuple(string("OpEntryPoint")              , Equals<4>              , All)
+                    , make_tuple(string("OpExecutionMode ")          , Range<5, 6>()          , All)
+                    , make_tuple(string("OpExecutionModeId")         , Range<5, 6>()          , All)
+                    , make_tuple(string("OpSource ")                 , Range<7, 11>()         , Range<8, kRangeEnd>())
+                    , make_tuple(string("OpSourceContinued ")        , Range<7, 11>()         , All)
+                    , make_tuple(string("OpSourceExtension ")        , Range<7, 11>()         , All)
+                    , make_tuple(string("%str2 = OpString ")         , Range<7, 11>()         , All)
+                    , make_tuple(string("OpName ")                   , Range<12, 13>()        , All)
+                    , make_tuple(string("OpMemberName ")             , Range<12, 13>()        , All)
+                    , make_tuple(string("OpDecorate ")               , Range<14, 17>()        , All)
+                    , make_tuple(string("OpMemberDecorate ")         , Range<14, 17>()        , All)
+                    , make_tuple(string("OpGroupDecorate ")          , Range<14, 17>()        , Range<17, kRangeEnd>())
+                    , make_tuple(string("OpDecorationGroup")         , Range<14, 17>()        , Range<0, 16>())
+                    , make_tuple(string("OpTypeBool")                , Range<18, 31>()        , All)
+                    , make_tuple(string("OpTypeVoid")                , Range<18, 31>()        , Range<0, 26>())
+                    , make_tuple(string("OpTypeFloat")               , Range<18, 31>()        , Range<0,21>())
+                    , make_tuple(string("OpTypeInt")                 , Range<18, 31>()        , Range<0, 21>())
+                    , make_tuple(string("OpTypeVector %floatt 4")    , Range<18, 31>()        , Range<20, 24>())
+                    , make_tuple(string("OpTypeMatrix %vec4 4")      , Range<18, 31>()        , Range<23, kRangeEnd>())
+                    , make_tuple(string("OpTypeStruct")              , Range<18, 31>()        , Range<25, kRangeEnd>())
+                    , make_tuple(string("%vfunct   = OpTypeFunction"), Range<18, 31>()        , Range<21, 31>())
+                    , make_tuple(string("OpConstant")                , Range<18, 31>()        , Range<21, kRangeEnd>())
+                    , make_tuple(string("OpLine ")                   , Range<18, kRangeEnd>() , Range<8, kRangeEnd>())
+                    , make_tuple(string("OpNoLine")                  , Range<18, kRangeEnd>() , All)
+                    , make_tuple(string("%fLabel   = OpLabel")       , Equals<39>             , All)
+                    , make_tuple(string("OpNop")                     , Equals<40>             , Range<40,kRangeEnd>())
+                    , make_tuple(string("OpReturn ; %func2 return")  , Equals<41>             , All)
     )),);
 // clang-format on
 
@@ -397,7 +398,8 @@ OpReturn
   CompileSuccessfully(s);
   ASSERT_EQ(SPV_ERROR_INVALID_LAYOUT, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              StrEq("Missing OpFunctionEnd at end of module."));
+              StrEq("Missing OpFunctionEnd at end of module.\n"
+                    "  OpReturn\n"));
 }
 
 TEST_F(ValidateLayout, MissingFunctionEndForFunctionPrototype) {
@@ -413,7 +415,8 @@ OpMemoryModel Logical GLSL450
   CompileSuccessfully(s);
   ASSERT_EQ(SPV_ERROR_INVALID_LAYOUT, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              StrEq("Missing OpFunctionEnd at end of module."));
+              StrEq("Missing OpFunctionEnd at end of module.\n"
+                    "  %3 = OpFunction %void None %2\n"));
 }
 
 using ValidateOpFunctionParameter = spvtest::ValidateBase<int>;
@@ -637,4 +640,7 @@ TEST_F(ValidateLayout, ModuleProcessedInvalidInBasicBlock) {
 }
 
 // TODO(umar): Test optional instructions
+
 }  // namespace
+}  // namespace val
+}  // namespace spvtools

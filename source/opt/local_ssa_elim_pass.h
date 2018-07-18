@@ -34,19 +34,19 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class LocalMultiStoreElimPass : public MemPass {
-  using cbb_ptr = const ir::BasicBlock*;
+  using cbb_ptr = const BasicBlock*;
 
  public:
   using GetBlocksFunction =
-      std::function<std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+      std::function<std::vector<BasicBlock*>*(const BasicBlock*)>;
 
   LocalMultiStoreElimPass();
-  const char* name() const override { return "eliminate-local-multi-store"; }
-  Status Process(ir::IRContext* c) override;
 
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse |
-           ir::IRContext::kAnalysisInstrToBlockMapping;
+  const char* name() const override { return "eliminate-local-multi-store"; }
+  Status Process() override;
+
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping;
   }
 
  private:
@@ -56,7 +56,6 @@ class LocalMultiStoreElimPass : public MemPass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  void Initialize(ir::IRContext* c);
   Pass::Status ProcessImpl();
 
   // Extensions supported by this pass.

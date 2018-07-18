@@ -22,6 +22,8 @@
 #include "unit_spirv.h"
 #include "val_fixtures.h"
 
+namespace spvtools {
+namespace val {
 namespace {
 
 using ::testing::HasSubstr;
@@ -224,6 +226,33 @@ TEST_F(ValidateData, int8_bad) {
   EXPECT_THAT(getDiagnosticString(), HasSubstr(missing_int8_cap_error));
 }
 
+TEST_F(ValidateData, int8_with_storage_buffer_8bit_access_good) {
+  string str = HeaderWith(
+                   "StorageBuffer8BitAccess "
+                   "OpExtension \"SPV_KHR_8bit_storage\"") +
+               " %2 = OpTypeInt 8 0";
+  CompileSuccessfully(str.c_str());
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions()) << getDiagnosticString();
+}
+
+TEST_F(ValidateData, int8_with_uniform_and_storage_buffer_8bit_access_good) {
+  string str = HeaderWith(
+                   "UniformAndStorageBuffer8BitAccess "
+                   "OpExtension \"SPV_KHR_8bit_storage\"") +
+               " %2 = OpTypeInt 8 0";
+  CompileSuccessfully(str.c_str());
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions()) << getDiagnosticString();
+}
+
+TEST_F(ValidateData, int8_with_storage_push_constant_8_good) {
+  string str = HeaderWith(
+                   "StoragePushConstant8 "
+                   "OpExtension \"SPV_KHR_8bit_storage\"") +
+               " %2 = OpTypeInt 8 0";
+  CompileSuccessfully(str.c_str());
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions()) << getDiagnosticString();
+}
+
 TEST_F(ValidateData, int16_good) {
   string str = header_with_int16 + "%2 = OpTypeInt 16 1";
   CompileSuccessfully(str.c_str());
@@ -341,6 +370,16 @@ TEST_F(ValidateData, matrix_data_type_float) {
 )";
   CompileSuccessfully(str.c_str());
   ASSERT_EQ(SPV_SUCCESS, ValidateInstructions());
+}
+
+TEST_F(ValidateData, ids_should_be_validated_before_data) {
+  string str = header + R"(
+%f32    =  OpTypeFloat 32
+%mat33  =  OpTypeMatrix %vec3 3
+)";
+  CompileSuccessfully(str.c_str());
+  ASSERT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
+  EXPECT_THAT(getDiagnosticString(), HasSubstr("ID 3 has not been defined"));
 }
 
 TEST_F(ValidateData, matrix_bad_column_type) {
@@ -592,4 +631,6 @@ TEST_F(ValidateData, vulkan_disallow_free_fp_rounding_mode) {
   }
 }
 
-}  // anonymous namespace
+}  // namespace
+}  // namespace val
+}  // namespace spvtools

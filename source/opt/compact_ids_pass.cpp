@@ -21,16 +21,11 @@
 namespace spvtools {
 namespace opt {
 
-using ir::Instruction;
-using ir::Operand;
-
-Pass::Status CompactIdsPass::Process(ir::IRContext* c) {
-  InitializeProcessing(c);
-
+Pass::Status CompactIdsPass::Process() {
   bool modified = false;
   std::unordered_map<uint32_t, uint32_t> result_id_mapping;
 
-  c->module()->ForEachInst(
+  context()->module()->ForEachInst(
       [&result_id_mapping, &modified](Instruction* inst) {
         auto operand = inst->begin();
         while (operand != inst->end()) {
@@ -64,7 +59,7 @@ Pass::Status CompactIdsPass::Process(ir::IRContext* c) {
       true);
 
   if (modified)
-    c->module()->SetIdBound(
+    context()->module()->SetIdBound(
         static_cast<uint32_t>(result_id_mapping.size() + 1));
 
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;

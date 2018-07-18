@@ -34,7 +34,7 @@ namespace opt {
 class InlineOpaquePass : public InlinePass {
  public:
   InlineOpaquePass();
-  Status Process(ir::IRContext* c) override;
+  Status Process() override;
 
   const char* name() const override { return "inline-entry-points-opaque"; }
 
@@ -43,14 +43,14 @@ class InlineOpaquePass : public InlinePass {
   bool IsOpaqueType(uint32_t typeId);
 
   // Return true if function call |callInst| has opaque argument or return type
-  bool HasOpaqueArgsOrReturn(const ir::Instruction* callInst);
+  bool HasOpaqueArgsOrReturn(const Instruction* callInst);
 
   // Inline all function calls in |func| that have opaque params or return
   // type. Inline similarly all code that is inlined into func. Return true
   // if func is modified.
-  bool InlineOpaque(ir::Function* func);
+  bool InlineOpaque(Function* func);
 
-  void Initialize(ir::IRContext* c);
+  void Initialize();
   Pass::Status ProcessImpl();
 };
 

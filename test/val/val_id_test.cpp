@@ -26,6 +26,8 @@
 // in stages, ID validation is only one of these stages. All validation stages
 // are stand alone.
 
+namespace spvtools {
+namespace val {
 namespace {
 
 using spvtest::ScopedContext;
@@ -167,8 +169,9 @@ TEST_F(ValidateIdWithMessage, OpMemberNameTypeBad) {
 %1 = OpTypeInt 32 0)";
   CompileSuccessfully(spirv.c_str());
   EXPECT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
-  EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpMemberName Type <id> '1' is not a struct type."));
+  EXPECT_THAT(
+      getDiagnosticString(),
+      HasSubstr("OpMemberName Type <id> '1[foo]' is not a struct type."));
 }
 TEST_F(ValidateIdWithMessage, OpMemberNameMemberBad) {
   string spirv = kGLSL450MemoryModel + R"(
@@ -177,9 +180,10 @@ TEST_F(ValidateIdWithMessage, OpMemberNameMemberBad) {
 %1 = OpTypeStruct %2)";
   CompileSuccessfully(spirv.c_str());
   EXPECT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
-  EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpMemberName Member <id> '1' index is larger than "
-                        "Type <id> '1's member count."));
+  EXPECT_THAT(
+      getDiagnosticString(),
+      HasSubstr("OpMemberName Member <id> '1[foo]' index is larger than "
+                "Type <id> '1[foo]'s member count."));
 }
 
 TEST_F(ValidateIdWithMessage, OpLineGood) {
@@ -3844,8 +3848,10 @@ TEST_F(ValidateIdWithMessage, OpVectorShuffleLiterals) {
      OpFunctionEnd)";
   CompileSuccessfully(spirv.c_str());
   EXPECT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
-  EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("Component literal value 5 is greater than 4."));
+  EXPECT_THAT(
+      getDiagnosticString(),
+      HasSubstr(
+          "Component index 5 is out of range for a result vector of size 5."));
 }
 
 // TODO: OpCompositeConstruct
@@ -4702,6 +4708,32 @@ OpFunctionEnd
   EXPECT_EQ(SPV_SUCCESS, ValidateAndRetrieveValidationState());
 }
 
+TEST_F(ValidateIdWithMessage, CorrectErrorForShuffle) {
+  string spirv = kGLSL450MemoryModel + R"(
+   %uint = OpTypeInt 32 0
+  %float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%v2float = OpTypeVector %float 2
+   %void = OpTypeVoid
+    %548 = OpTypeFunction %void
+     %CS = OpFunction %void None %548
+    %550 = OpLabel
+   %6275 = OpUndef %v2float
+   %6280 = OpUndef %v2float
+   %6282 = OpVectorShuffle %v4float %6275 %6280 0 1 4 5
+           OpReturn
+           OpFunctionEnd
+  )";
+
+  CompileSuccessfully(spirv.c_str());
+  EXPECT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
+  EXPECT_THAT(
+      getDiagnosticString(),
+      HasSubstr(
+          "Component index 4 is out of range for a result vector of size 4."));
+  EXPECT_EQ(23, getErrorPosition().index);
+}
+
 // TODO: OpLifetimeStart
 // TODO: OpLifetimeStop
 // TODO: OpAtomicInit
@@ -4766,4 +4798,6 @@ OpFunctionEnd
 // TODO: OpGroupCommitReadPipe
 // TODO: OpGroupCommitWritePipe
 
-}  // anonymous namespace
+}  // namespace
+}  // namespace val
+}  // namespace spvtools

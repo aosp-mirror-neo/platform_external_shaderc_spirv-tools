@@ -18,7 +18,7 @@
 #include "reflect.h"
 
 namespace spvtools {
-namespace ir {
+namespace opt {
 
 IrLoader::IrLoader(const MessageConsumer& consumer, Module* m)
     : consumer_(consumer),
@@ -153,9 +153,8 @@ void IrLoader::EndModule() {
   }
   for (auto& function : *module_) {
     for (auto& bb : function) bb.SetParent(&function);
-    function.SetParent(module_);
   }
 }
 
-}  // namespace ir
+}  // namespace opt
 }  // namespace spvtools

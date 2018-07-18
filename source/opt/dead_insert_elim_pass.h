@@ -35,40 +35,45 @@ namespace opt {
 // See optimizer.hpp for documentation.
 class DeadInsertElimPass : public MemPass {
  public:
-  DeadInsertElimPass();
+  DeadInsertElimPass() = default;
+
   const char* name() const override { return "eliminate-dead-inserts"; }
-  Status Process(ir::IRContext*) override;
+  Status Process() override;
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse |
+           IRContext::kAnalysisInstrToBlockMapping |
+           IRContext::kAnalysisDecorations | IRContext::kAnalysisCombinators |
+           IRContext::kAnalysisCFG | IRContext::kAnalysisDominatorAnalysis |
+           IRContext::kAnalysisNameMap;
+  }
 
  private:
   // Return the number of subcomponents in the composite type |typeId|.
   // Return 0 if not a composite type or number of components is not a
   // 32-bit constant.
-  uint32_t NumComponents(ir::Instruction* typeInst);
+  uint32_t NumComponents(Instruction* typeInst);
 
   // Mark all inserts in instruction chain ending at |insertChain| with
   // indices that intersect with extract indices |extIndices| starting with
   // index at |extOffset|. Chains are composed solely of Inserts and Phis.
   // Mark all inserts in chain if |extIndices| is nullptr.
-  void MarkInsertChain(ir::Instruction* insertChain,
+  void MarkInsertChain(Instruction* insertChain,
                        std::vector<uint32_t>* extIndices, uint32_t extOffset,
                        std::unordered_set<uint32_t>* visited_phis);
 
   // Perform EliminateDeadInsertsOnePass(|func|) until no modification is
   // made. Return true if modified.
-  bool EliminateDeadInserts(ir::Function* func);
+  bool EliminateDeadInserts(Function* func);
 
   // DCE all dead struct, matrix and vector inserts in |func|. An insert is
   // dead if the value it inserts is never used. Replace any reference to the
   // insert with its original composite. Return true if modified. Dead inserts
   // in dependence cycles are not currently eliminated. Dead inserts into
   // arrays are not currently eliminated.
-  bool EliminateDeadInsertsOnePass(ir::Function* func);
+  bool EliminateDeadInsertsOnePass(Function* func);
 
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
-
-  void Initialize(ir::IRContext* c);
-  Pass::Status ProcessImpl();
 
   // Live inserts
   std::unordered_set<uint32_t> liveInserts_;

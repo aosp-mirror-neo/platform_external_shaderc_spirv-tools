@@ -18,6 +18,7 @@
 #include <stack>
 
 #include "opcode.h"
+#include "spirv_target_env.h"
 #include "val/basic_block.h"
 #include "val/construct.h"
 #include "val/function.h"
@@ -29,9 +30,10 @@ using std::string;
 using std::unordered_map;
 using std::vector;
 
-namespace libspirv {
-
+namespace spvtools {
+namespace val {
 namespace {
+
 bool IsInstructionInLayoutSection(ModuleLayoutSection layout, SpvOp op) {
   // See Section 2.4
   bool out = false;
@@ -139,12 +141,16 @@ bool IsInstructionInLayoutSection(ModuleLayoutSection layout, SpvOp op) {
   return out;
 }
 
-}  // anonymous namespace
+}  // namespace
 
 ValidationState_t::ValidationState_t(const spv_const_context ctx,
-                                     const spv_const_validator_options opt)
+                                     const spv_const_validator_options opt,
+                                     const uint32_t* words,
+                                     const size_t num_words)
     : context_(ctx),
       options_(opt),
+      words_(words),
+      num_words_(num_words),
       instruction_counter_(0),
       unresolved_forward_ids_{},
       operand_names_{},
@@ -162,6 +168,25 @@ ValidationState_t::ValidationState_t(const spv_const_context ctx,
       memory_model_(SpvMemoryModelMax),
       in_function_(false) {
   assert(opt && "Validator options may not be Null.");
+
+  const auto env = context_->target_env;
+
+  if (spvIsVulkanEnv(env)) {
+    features_.non_monotonic_struct_member_offsets = true;
+
+    // Vulkan 1.1 includes VK_KHR_relaxed_block_layout in core.
+    if (env != SPV_ENV_VULKAN_1_0) {
+      features_.env_relaxed_block_layout = true;
+    }
+  }
+
+  switch (env) {
+    case SPV_ENV_WEBGPU_0:
+      features_.bans_op_undef = true;
+      break;
+    default:
+      break;
+  }
 }
 
 spv_result_t ValidationState_t::ForwardDeclareId(uint32_t id) {
@@ -254,9 +279,19 @@ bool ValidationState_t::IsOpcodeInCurrentLayoutSection(SpvOp op) {
 }
 
 DiagnosticStream ValidationState_t::diag(spv_result_t error_code) const {
-  return libspirv::DiagnosticStream(
-      {0, 0, static_cast<size_t>(instruction_counter_)}, context_->consumer,
-      error_code);
+  return diag(error_code, instruction_counter_);
+}
+
+DiagnosticStream ValidationState_t::diag(spv_result_t error_code,
+                                         int instruction_counter) const {
+  std::string disassembly;
+  if (instruction_counter >= 0 && static_cast<size_t>(instruction_counter) <=
+                                      ordered_instructions_.size()) {
+    disassembly = Disassemble(ordered_instructions_[instruction_counter - 1]);
+  }
+  size_t pos = instruction_counter >= 0 ? instruction_counter : 0;
+  return DiagnosticStream({0, 0, pos}, context_->consumer, disassembly,
+                          error_code);
 }
 
 deque<Function>& ValidationState_t::functions() { return module_functions_; }
@@ -301,6 +336,12 @@ void ValidationState_t::RegisterCapability(SpvCapability cap) {
   switch (cap) {
     case SpvCapabilityKernel:
       features_.group_ops_reduce_and_scans = true;
+      break;
+    case SpvCapabilityInt8:
+    case SpvCapabilityStorageBuffer8BitAccess:
+    case SpvCapabilityUniformAndStorageBuffer8BitAccess:
+    case SpvCapabilityStoragePushConstant8:
+      features_.declare_int8_type = true;
       break;
     case SpvCapabilityInt16:
       features_.declare_int16_type = true;
@@ -409,9 +450,16 @@ void ValidationState_t::RegisterInstruction(
   if (in_function_body()) {
     ordered_instructions_.emplace_back(&inst, &current_function(),
                                        current_function().current_block());
+    if (in_block() &&
+        spvOpcodeIsBlockTerminator(static_cast<SpvOp>(inst.opcode))) {
+      current_function().current_block()->set_terminator(
+          &ordered_instructions_.back());
+    }
   } else {
     ordered_instructions_.emplace_back(&inst, nullptr, nullptr);
   }
+  ordered_instructions_.back().SetInstructionPosition(instruction_counter_);
+
   uint32_t id = ordered_instructions_.back().id();
   if (id) {
     all_definitions_.insert(make_pair(id, &ordered_instructions_.back()));
@@ -451,20 +499,20 @@ uint32_t ValidationState_t::getIdBound() const { return id_bound_; }
 
 void ValidationState_t::setIdBound(const uint32_t bound) { id_bound_ = bound; }
 
-bool ValidationState_t::RegisterUniqueTypeDeclaration(
-    const spv_parsed_instruction_t& inst) {
+bool ValidationState_t::RegisterUniqueTypeDeclaration(const Instruction* inst) {
   std::vector<uint32_t> key;
-  key.push_back(static_cast<uint32_t>(inst.opcode));
-  for (int index = 0; index < inst.num_operands; ++index) {
-    const spv_parsed_operand_t& operand = inst.operands[index];
+  key.push_back(static_cast<uint32_t>(inst->opcode()));
+  for (size_t index = 0; index < inst->operands().size(); ++index) {
+    const spv_parsed_operand_t& operand = inst->operand(index);
 
     if (operand.type == SPV_OPERAND_TYPE_RESULT_ID) continue;
 
     const int words_begin = operand.offset;
     const int words_end = words_begin + operand.num_words;
-    assert(words_end <= static_cast<int>(inst.num_words));
+    assert(words_end <= static_cast<int>(inst->words().size()));
 
-    key.insert(key.end(), inst.words + words_begin, inst.words + words_end);
+    key.insert(key.end(), inst->words().begin() + words_begin,
+               inst->words().begin() + words_end);
   }
 
   return unique_type_declarations_.insert(std::move(key)).second;
@@ -748,12 +796,9 @@ bool ValidationState_t::GetPointerTypeInfo(uint32_t id, uint32_t* data_type,
   return true;
 }
 
-uint32_t ValidationState_t::GetOperandTypeId(
-    const spv_parsed_instruction_t* inst, size_t operand_index) const {
-  assert(operand_index < inst->num_operands);
-  const spv_parsed_operand_t& operand = inst->operands[operand_index];
-  assert(operand.num_words == 1);
-  return GetTypeId(inst->words[operand.offset]);
+uint32_t ValidationState_t::GetOperandTypeId(const Instruction* inst,
+                                             size_t operand_index) const {
+  return GetTypeId(inst->GetOperandAs<uint32_t>(operand_index));
 }
 
 bool ValidationState_t::GetConstantValUint64(uint32_t id, uint64_t* val) const {
@@ -829,4 +874,19 @@ const std::vector<uint32_t>& ValidationState_t::FunctionEntryPoints(
   }
 }
 
-}  // namespace libspirv
+std::string ValidationState_t::Disassemble(const Instruction& inst) const {
+  const spv_parsed_instruction_t& c_inst(inst.c_inst());
+  return Disassemble(c_inst.words, c_inst.num_words);
+}
+
+std::string ValidationState_t::Disassemble(const uint32_t* words,
+                                           uint16_t num_words) const {
+  uint32_t disassembly_options = SPV_BINARY_TO_TEXT_OPTION_NO_HEADER |
+                                 SPV_BINARY_TO_TEXT_OPTION_FRIENDLY_NAMES;
+
+  return spvInstructionBinaryToText(context()->target_env, words, num_words,
+                                    words_, num_words_, disassembly_options);
+}
+
+}  // namespace val
+}  // namespace spvtools

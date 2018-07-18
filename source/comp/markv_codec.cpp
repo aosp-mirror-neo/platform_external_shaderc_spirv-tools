@@ -17,7 +17,7 @@
 //   - MARK-V to SPIR-V decoder
 //
 // MARK-V is a compression format for SPIR-V binaries. It strips away
-// non-essential information (such as result ids which can be regenerated) and
+// non-essential information (such as result IDs which can be regenerated) and
 // uses various bit reduction techiniques to reduce the size of the binary.
 
 #include <algorithm>
@@ -57,22 +57,18 @@
 #include "util/move_to_front.h"
 #include "util/parse_number.h"
 #include "val/instruction.h"
+#include "val/validate.h"
 #include "val/validation_state.h"
-#include "validate.h"
-
-using libspirv::DiagnosticStream;
-using libspirv::IdDescriptorCollection;
-using libspirv::Instruction;
-using libspirv::ValidationState_t;
-using spvutils::BitReaderWord64;
-using spvutils::BitWriterWord64;
-using spvutils::HuffmanCodec;
-using MoveToFront = spvutils::MoveToFront<uint32_t>;
-using MultiMoveToFront = spvutils::MultiMoveToFront<uint32_t>;
 
 namespace spvtools {
-
+namespace comp {
 namespace {
+
+using utils::BitReaderWord64;
+using utils::BitWriterWord64;
+using utils::HuffmanCodec;
+using MoveToFront = utils::MoveToFront<uint32_t>;
+using MultiMoveToFront = utils::MultiMoveToFront<uint32_t>;
 
 const uint32_t kSpirvMagicNumber = SpvMagicNumber;
 const uint32_t kMarkvMagicNumber = 0x07230303;
@@ -388,22 +384,11 @@ class MarkvCodecBase {
         model_(model),
         short_id_descriptors_(ShortHashU32Array),
         mtf_huffman_codecs_(GetMtfHuffmanCodecs()),
-        context_(context),
-        vstate_(validator_options
-                    ? new ValidationState_t(context, validator_options_)
-                    : nullptr) {}
-
-  // Validates a single instruction and updates validation state of the module.
-  // Does nothing and returns SPV_SUCCESS if validator was not created.
-  spv_result_t UpdateValidationState(const spv_parsed_instruction_t& inst) {
-    if (!vstate_) return SPV_SUCCESS;
-
-    return ValidateInstructionAndUpdateValidationState(vstate_.get(), &inst);
-  }
+        context_(context) {}
 
   // Returns instruction which created |id| or nullptr if such instruction was
   // not registered.
-  const Instruction* FindDef(uint32_t id) const {
+  const val::Instruction* FindDef(uint32_t id) const {
     const auto it = id_to_def_instruction_.find(id);
     if (it == id_to_def_instruction_.end()) return nullptr;
     return it->second;
@@ -411,7 +396,7 @@ class MarkvCodecBase {
 
   // Returns type id of vector type component.
   uint32_t GetVectorComponentType(uint32_t vector_type_id) const {
-    const Instruction* type_inst = FindDef(vector_type_id);
+    const val::Instruction* type_inst = FindDef(vector_type_id);
     assert(type_inst);
     assert(type_inst->opcode() == SpvOpTypeVector);
 
@@ -493,7 +478,7 @@ class MarkvCodecBase {
   // Returns diagnostic stream, position index is set to instruction number.
   DiagnosticStream Diag(spv_result_t error_code) const {
     return DiagnosticStream({0, 0, instructions_.size()}, context_->consumer,
-                            error_code);
+                            "", error_code);
   }
 
   // Returns current id bound.
@@ -503,13 +488,12 @@ class MarkvCodecBase {
   void SetIdBound(uint32_t id_bound) {
     assert(id_bound >= id_bound_);
     id_bound_ = id_bound;
-    if (vstate_) vstate_->setIdBound(id_bound);
   }
 
   // Returns Huffman codec for ranks of the mtf with given |handle|.
   // Different mtfs can use different rank distributions.
   // May return nullptr if the codec doesn't exist.
-  const spvutils::HuffmanCodec<uint32_t>* GetMtfHuffmanCodec(
+  const spvtools::utils::HuffmanCodec<uint32_t>* GetMtfHuffmanCodec(
       uint64_t handle) const {
     const auto it = mtf_huffman_codecs_.find(handle);
     if (it == mtf_huffman_codecs_.end()) return nullptr;
@@ -529,7 +513,7 @@ class MarkvCodecBase {
   }
 
   spv_validator_options validator_options_ = nullptr;
-  const libspirv::AssemblyGrammar grammar_;
+  const AssemblyGrammar grammar_;
   MarkvHeader header_;
 
   // MARK-V model, not owned.
@@ -562,7 +546,7 @@ class MarkvCodecBase {
   std::vector<uint32_t> ids_local_to_cur_function_;
 
   // List of instructions in the order they are given in the module.
-  std::vector<std::unique_ptr<const Instruction>> instructions_;
+  std::vector<std::unique_ptr<const val::Instruction>> instructions_;
 
   // Container/computer for long (32-bit) id descriptors.
   IdDescriptorCollection long_id_descriptors_;
@@ -587,13 +571,11 @@ class MarkvCodecBase {
   // If not nullptr, codec will log comments on the compression process.
   std::unique_ptr<MarkvLogger> logger_;
 
- private:
   spv_const_context context_ = nullptr;
 
-  std::unique_ptr<ValidationState_t> vstate_;
-
+ private:
   // Maps result id to the instruction which defined it.
-  std::unordered_map<uint32_t, const Instruction*> id_to_def_instruction_;
+  std::unordered_map<uint32_t, const val::Instruction*> id_to_def_instruction_;
 
   uint32_t id_bound_ = 1;
 };
@@ -760,19 +742,19 @@ class MarkvDecoder : public MarkvCodecBase {
   // of if validation fails.
   spv_result_t DecodeModule(std::vector<uint32_t>* spirv_binary);
 
- private:
-  // Describes the format of a typed literal number.
-  struct NumberType {
-    spv_number_kind_t type;
-    uint32_t bit_width;
-  };
-
   // Creates and returns validator options. Returned value owned by the caller.
   static spv_validator_options GetValidatorOptions(
       const MarkvCodecOptions& options) {
     return options.validate_spirv_binary ? spvValidatorOptionsCreate()
                                          : nullptr;
   }
+
+ private:
+  // Describes the format of a typed literal number.
+  struct NumberType {
+    spv_number_kind_t type;
+    uint32_t bit_width;
+  };
 
   // Reads a single bit from reader_. The read bit is stored in |bit|.
   // Returns false iff reader_ fails.
@@ -877,7 +859,7 @@ class MarkvDecoder : public MarkvCodecBase {
 };
 
 void MarkvCodecBase::ProcessCurInstruction() {
-  instructions_.emplace_back(new Instruction(&inst_));
+  instructions_.emplace_back(new val::Instruction(&inst_));
 
   const SpvOp opcode = SpvOp(inst_.opcode);
 
@@ -901,7 +883,7 @@ void MarkvCodecBase::ProcessCurInstruction() {
 
       // Store function parameter types in a queue, so that we know which types
       // to expect in the following OpFunctionParameter instructions.
-      const Instruction* def_inst = FindDef(inst_.words[4]);
+      const val::Instruction* def_inst = FindDef(inst_.words[4]);
       assert(def_inst);
       assert(def_inst->opcode() == SpvOpTypeFunction);
       for (uint32_t i = 3; i < def_inst->words().size(); ++i) {
@@ -1000,7 +982,7 @@ void MarkvCodecBase::ProcessCurInstruction() {
     }
 
     if (inst_.type_id) {
-      const Instruction* type_inst = FindDef(inst_.type_id);
+      const val::Instruction* type_inst = FindDef(inst_.type_id);
       assert(type_inst);
 
       multi_mtf_.Insert(kMtfObject, inst_.result_id);
@@ -1243,7 +1225,7 @@ uint64_t MarkvCodecBase::GetRuleBasedMtf() {
       if (operand_index_ == 1) {
         const uint32_t pointer_id = GetInstWords()[1];
         const uint32_t pointer_type = id_to_type_id_.at(pointer_id);
-        const Instruction* pointer_inst = FindDef(pointer_type);
+        const val::Instruction* pointer_inst = FindDef(pointer_type);
         assert(pointer_inst);
         assert(pointer_inst->opcode() == SpvOpTypePointer);
         const uint32_t data_type =
@@ -1290,7 +1272,7 @@ uint64_t MarkvCodecBase::GetRuleBasedMtf() {
     case SpvOpConstantComposite: {
       if (operand_index_ == 0) return kMtfTypeComposite;
       if (operand_index_ >= 2) {
-        const Instruction* composite_type_inst = FindDef(inst_.type_id);
+        const val::Instruction* composite_type_inst = FindDef(inst_.type_id);
         assert(composite_type_inst);
         if (composite_type_inst->opcode() == SpvOpTypeVector) {
           return GetMtfIdOfType(composite_type_inst->word(2));
@@ -1424,13 +1406,13 @@ uint64_t MarkvCodecBase::GetRuleBasedMtf() {
 
       if (operand_index_ >= 3) {
         const uint32_t function_id = GetInstWords()[3];
-        const Instruction* function_inst = FindDef(function_id);
+        const val::Instruction* function_inst = FindDef(function_id);
         if (!function_inst) return kMtfObject;
 
         assert(function_inst->opcode() == SpvOpFunction);
 
         const uint32_t function_type_id = function_inst->word(4);
-        const Instruction* function_type_inst = FindDef(function_type_id);
+        const val::Instruction* function_type_inst = FindDef(function_type_id);
         assert(function_type_inst);
         assert(function_type_inst->opcode() == SpvOpTypeFunction);
 
@@ -2148,9 +2130,6 @@ spv_result_t MarkvEncoder::EncodeInstruction(
   SpvOp opcode = SpvOp(inst.opcode);
   inst_ = inst;
 
-  const spv_result_t validation_result = UpdateValidationState(inst);
-  if (validation_result != SPV_SUCCESS) return validation_result;
-
   LogDisassemblyInstruction();
 
   const spv_result_t opcode_encodig_result =
@@ -2324,11 +2303,16 @@ spv_result_t MarkvDecoder::DecodeModule(std::vector<uint32_t>* spirv_binary) {
     inst_ = {};
     const spv_result_t decode_result = DecodeInstruction();
     if (decode_result != SPV_SUCCESS) return decode_result;
-
-    const spv_result_t validation_result = UpdateValidationState(inst_);
-    if (validation_result != SPV_SUCCESS) return validation_result;
   }
 
+  if (validator_options_) {
+    spv_const_binary_t validation_binary = {spirv_.data(), spirv_.size()};
+    const spv_result_t result = spvValidateWithOptions(
+        context_, validator_options_, &validation_binary, nullptr);
+    if (result != SPV_SUCCESS) return result;
+  }
+
+  // Validate the decode binary
   if (reader_.GetNumReadBits() != header_.markv_length_in_bits ||
       !reader_.OnlyZeroesLeft()) {
     return Diag(SPV_ERROR_INVALID_BINARY)
@@ -2845,27 +2829,20 @@ spv_result_t SpirvToMarkv(
     MessageConsumer message_consumer, MarkvLogConsumer log_consumer,
     MarkvDebugConsumer debug_consumer, std::vector<uint8_t>* markv) {
   spv_context_t hijack_context = *context;
-  libspirv::SetContextMessageConsumer(&hijack_context, message_consumer);
+  SetContextMessageConsumer(&hijack_context, message_consumer);
 
-  spv_const_binary_t spirv_binary = {spirv.data(), spirv.size()};
-
-  spv_endianness_t endian;
-  spv_position_t position = {};
-  if (spvBinaryEndianness(&spirv_binary, &endian)) {
-    return DiagnosticStream(position, hijack_context.consumer,
-                            SPV_ERROR_INVALID_BINARY)
-           << "Invalid SPIR-V magic number.";
-  }
-
-  spv_header_t header;
-  if (spvBinaryHeaderGet(&spirv_binary, endian, &header)) {
-    return DiagnosticStream(position, hijack_context.consumer,
-                            SPV_ERROR_INVALID_BINARY)
-           << "Invalid SPIR-V header.";
+  spv_validator_options validator_options =
+      MarkvDecoder::GetValidatorOptions(options);
+  if (validator_options) {
+    spv_const_binary_t spirv_binary = {spirv.data(), spirv.size()};
+    const spv_result_t result = spvValidateWithOptions(
+        &hijack_context, validator_options, &spirv_binary, nullptr);
+    if (result != SPV_SUCCESS) return result;
   }
 
   MarkvEncoder encoder(&hijack_context, options, &markv_model);
 
+  spv_position_t position = {};
   if (log_consumer || debug_consumer) {
     encoder.CreateLogger(log_consumer, debug_consumer);
 
@@ -2873,7 +2850,7 @@ spv_result_t SpirvToMarkv(
     if (spvBinaryToText(&hijack_context, spirv.data(), spirv.size(),
                         SPV_BINARY_TO_TEXT_OPTION_NO_HEADER, &text,
                         nullptr) != SPV_SUCCESS) {
-      return DiagnosticStream(position, hijack_context.consumer,
+      return DiagnosticStream(position, hijack_context.consumer, "",
                               SPV_ERROR_INVALID_BINARY)
              << "Failed to disassemble SPIR-V binary.";
     }
@@ -2884,7 +2861,7 @@ spv_result_t SpirvToMarkv(
 
   if (spvBinaryParse(&hijack_context, &encoder, spirv.data(), spirv.size(),
                      EncodeHeader, EncodeInstruction, nullptr) != SPV_SUCCESS) {
-    return DiagnosticStream(position, hijack_context.consumer,
+    return DiagnosticStream(position, hijack_context.consumer, "",
                             SPV_ERROR_INVALID_BINARY)
            << "Unable to encode to MARK-V.";
   }
@@ -2900,7 +2877,7 @@ spv_result_t MarkvToSpirv(
     MarkvDebugConsumer debug_consumer, std::vector<uint32_t>* spirv) {
   spv_position_t position = {};
   spv_context_t hijack_context = *context;
-  libspirv::SetContextMessageConsumer(&hijack_context, message_consumer);
+  SetContextMessageConsumer(&hijack_context, message_consumer);
 
   MarkvDecoder decoder(&hijack_context, markv, options, &markv_model);
 
@@ -2908,7 +2885,7 @@ spv_result_t MarkvToSpirv(
     decoder.CreateLogger(log_consumer, debug_consumer);
 
   if (decoder.DecodeModule(spirv) != SPV_SUCCESS) {
-    return DiagnosticStream(position, hijack_context.consumer,
+    return DiagnosticStream(position, hijack_context.consumer, "",
                             SPV_ERROR_INVALID_BINARY)
            << "Unable to decode MARK-V.";
   }
@@ -2917,4 +2894,5 @@ spv_result_t MarkvToSpirv(
   return SPV_SUCCESS;
 }
 
+}  // namespace comp
 }  // namespace spvtools

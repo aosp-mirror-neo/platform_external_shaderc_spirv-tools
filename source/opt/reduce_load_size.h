@@ -26,15 +26,15 @@ namespace opt {
 class ReduceLoadSize : public Pass {
  public:
   const char* name() const override { return "reduce-load-size"; }
-  Status Process(ir::IRContext* irContext) override;
+  Status Process() override;
 
   // Return the mask of preserved Analyses.
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisInstrToBlockMapping |
-           ir::IRContext::kAnalysisCombinators | ir::IRContext::kAnalysisCFG |
-           ir::IRContext::kAnalysisDominatorAnalysis |
-           ir::IRContext::kAnalysisLoopAnalysis |
-           ir::IRContext::kAnalysisNameMap;
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse |
+           IRContext::kAnalysisInstrToBlockMapping |
+           IRContext::kAnalysisCombinators | IRContext::kAnalysisCFG |
+           IRContext::kAnalysisDominatorAnalysis |
+           IRContext::kAnalysisLoopAnalysis | IRContext::kAnalysisNameMap;
   }
 
  private:
@@ -43,13 +43,13 @@ class ReduceLoadSize : public Pass {
   // feeding |inst|.  Returns true if the substitution happened.  The position
   // of the new instructions will be in the same place as the load feeding the
   // extract.
-  bool ReplaceExtract(ir::Instruction* inst);
+  bool ReplaceExtract(Instruction* inst);
 
   // Returns true if the OpCompositeExtract instruction |inst| should be replace
   // or not.  This is determined by looking at the load that feeds |inst| if
   // it is a load.  |should_replace_cache_| is used to cache the results based
   // on the load feeding |inst|.
-  bool ShouldReplaceExtract(ir::Instruction* inst);
+  bool ShouldReplaceExtract(Instruction* inst);
 
   // Maps the result id of an OpLoad instruction to the result of whether or
   // not the OpCompositeExtract that use the id should be replaced.

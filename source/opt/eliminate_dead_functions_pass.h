@@ -27,14 +27,14 @@ namespace opt {
 class EliminateDeadFunctionsPass : public MemPass {
  public:
   const char* name() const override { return "eliminate-dead-functions"; }
-  Status Process(ir::IRContext* c) override;
+  Status Process() override;
 
-  ir::IRContext::Analysis GetPreservedAnalyses() override {
-    return ir::IRContext::kAnalysisDefUse;
+  IRContext::Analysis GetPreservedAnalyses() override {
+    return IRContext::kAnalysisDefUse;
   }
 
  private:
-  void EliminateFunction(ir::Function* func);
+  void EliminateFunction(Function* func);
 };
 
 }  // namespace opt

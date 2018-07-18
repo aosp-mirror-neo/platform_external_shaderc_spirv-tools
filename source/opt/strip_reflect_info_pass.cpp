@@ -22,15 +22,13 @@
 namespace spvtools {
 namespace opt {
 
-using spvtools::ir::Instruction;
-
-Pass::Status StripReflectInfoPass::Process(ir::IRContext* irContext) {
+Pass::Status StripReflectInfoPass::Process() {
   bool modified = false;
 
   std::vector<Instruction*> to_remove;
 
   bool other_uses_for_decorate_string = false;
-  for (auto& inst : irContext->module()->annotations()) {
+  for (auto& inst : context()->module()->annotations()) {
     switch (inst.opcode()) {
       case SpvOpDecorateStringGOOGLE:
         if (inst.GetSingleWordInOperand(1) == SpvDecorationHlslSemanticGOOGLE) {
@@ -52,7 +50,7 @@ Pass::Status StripReflectInfoPass::Process(ir::IRContext* irContext) {
     }
   }
 
-  for (auto& inst : irContext->module()->extensions()) {
+  for (auto& inst : context()->module()->extensions()) {
     const char* ext_name =
         reinterpret_cast<const char*>(&inst.GetInOperand(0).words[0]);
     if (0 == std::strcmp(ext_name, "SPV_GOOGLE_hlsl_functionality1")) {
@@ -65,7 +63,7 @@ Pass::Status StripReflectInfoPass::Process(ir::IRContext* irContext) {
 
   for (auto* inst : to_remove) {
     modified = true;
-    irContext->KillInst(inst);
+    context()->KillInst(inst);
   }
 
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;

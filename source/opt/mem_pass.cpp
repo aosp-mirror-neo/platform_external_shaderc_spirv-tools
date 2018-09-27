@@ -14,13 +14,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "mem_pass.h"
+#include "source/opt/mem_pass.h"
 
-#include "basic_block.h"
-#include "cfa.h"
-#include "dominator_analysis.h"
-#include "ir_context.h"
-#include "iterator.h"
+#include <memory>
+#include <set>
+#include <vector>
+
+#include "source/cfa.h"
+#include "source/opt/basic_block.h"
+#include "source/opt/dominator_analysis.h"
+#include "source/opt/ir_context.h"
+#include "source/opt/iterator.h"
 
 namespace spvtools {
 namespace opt {
@@ -178,7 +182,7 @@ void MemPass::AddStores(uint32_t ptr_id, std::queue<Instruction*>* insts) {
 }
 
 void MemPass::DCEInst(Instruction* inst,
-                      const function<void(Instruction*)>& call_back) {
+                      const std::function<void(Instruction*)>& call_back) {
   std::queue<Instruction*> deadInsts;
   deadInsts.push(inst);
   while (!deadInsts.empty()) {
@@ -310,7 +314,7 @@ bool MemPass::IsTargetVar(uint32_t varId) {
 //           [ ... ]
 //           %30 = OpPhi %int %int_42 %13 %50 %14 %50 %15
 void MemPass::RemovePhiOperands(
-    Instruction* phi, const unordered_set<BasicBlock*>& reachable_blocks) {
+    Instruction* phi, const std::unordered_set<BasicBlock*>& reachable_blocks) {
   std::vector<Operand> keep_operands;
   uint32_t type_id = 0;
   // The id of an undefined value we've generated.

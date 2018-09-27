@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "basic_block.h"
-#include "function.h"
-#include "ir_context.h"
-#include "module.h"
-#include "reflect.h"
-
-#include "make_unique.h"
+#include "source/opt/basic_block.h"
 
 #include <ostream>
+
+#include "source/opt/function.h"
+#include "source/opt/ir_context.h"
+#include "source/opt/module.h"
+#include "source/opt/reflect.h"
+#include "source/util/make_unique.h"
 
 namespace spvtools {
 namespace opt {
@@ -35,9 +35,18 @@ const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
 BasicBlock* BasicBlock::Clone(IRContext* context) const {
   BasicBlock* clone = new BasicBlock(
       std::unique_ptr<Instruction>(GetLabelInst()->Clone(context)));
-  for (const auto& inst : insts_)
+  for (const auto& inst : insts_) {
     // Use the incoming context
     clone->AddInstruction(std::unique_ptr<Instruction>(inst.Clone(context)));
+  }
+
+  if (context->AreAnalysesValid(
+          IRContext::Analysis::kAnalysisInstrToBlockMapping)) {
+    for (auto& inst : *clone) {
+      context->set_instr_block(&inst, clone);
+    }
+  }
+
   return clone;
 }
 
@@ -193,6 +202,10 @@ std::ostream& operator<<(std::ostream& str, const BasicBlock& block) {
   return str;
 }
 
+void BasicBlock::Dump() const {
+  std::cerr << "Basic block #" << id() << "\n" << *this << "\n ";
+}
+
 std::string BasicBlock::PrettyPrint(uint32_t options) const {
   std::ostringstream str;
   ForEachInst([&str, options](const Instruction* inst) {
@@ -208,13 +221,39 @@ BasicBlock* BasicBlock::SplitBasicBlock(IRContext* context, uint32_t label_id,
                                         iterator iter) {
   assert(!insts_.empty());
 
-  BasicBlock* new_block = new BasicBlock(MakeUnique<Instruction>(
-      context, SpvOpLabel, 0, label_id, std::initializer_list<Operand>{}));
+  std::unique_ptr<BasicBlock> new_block_temp =
+      MakeUnique<BasicBlock>(MakeUnique<Instruction>(
+          context, SpvOpLabel, 0, label_id, std::initializer_list<Operand>{}));
+  BasicBlock* new_block = new_block_temp.get();
+  function_->InsertBasicBlockAfter(std::move(new_block_temp), this);
 
   new_block->insts_.Splice(new_block->end(), &insts_, iter, end());
   new_block->SetParent(GetParent());
 
+  context->AnalyzeDefUse(new_block->GetLabelInst());
+
+  // Update the phi nodes in the successor blocks to reference the new block id.
+  const_cast<const BasicBlock*>(new_block)->ForEachSuccessorLabel(
+      [new_block, this, context](const uint32_t label) {
+        BasicBlock* target_bb = context->get_instr_block(label);
+        target_bb->ForEachPhiInst(
+            [this, new_block, context](Instruction* phi_inst) {
+              bool changed = false;
+              for (uint32_t i = 1; i < phi_inst->NumInOperands(); i += 2) {
+                if (phi_inst->GetSingleWordInOperand(i) == this->id()) {
+                  changed = true;
+                  phi_inst->SetInOperand(i, {new_block->id()});
+                }
+              }
+
+              if (changed) {
+                context->UpdateDefUse(phi_inst);
+              }
+            });
+      });
+
   if (context->AreAnalysesValid(IRContext::kAnalysisInstrToBlockMapping)) {
+    context->set_instr_block(new_block->GetLabelInst(), new_block);
     new_block->ForEachInst([new_block, context](Instruction* inst) {
       context->set_instr_block(inst, new_block);
     });

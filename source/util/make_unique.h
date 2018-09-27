@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SPIRV_TOOLS_MESSAGE_H_
-#define SPIRV_TOOLS_MESSAGE_H_
+#ifndef SOURCE_UTIL_MAKE_UNIQUE_H_
+#define SOURCE_UTIL_MAKE_UNIQUE_H_
 
-#include <string>
-
-#include "spirv-tools/libspirv.h"
+#include <memory>
+#include <utility>
 
 namespace spvtools {
 
-// A helper function to compose and return a string from the message in the
-// following format:
-//   "<level>: <source>:<line>:<column>:<index>: <message>"
-std::string StringifyMessage(spv_message_level_t level, const char* source,
-                             const spv_position_t& position,
-                             const char* message);
+template <typename T, typename... Args>
+std::unique_ptr<T> MakeUnique(Args&&... args) {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
 
 }  // namespace spvtools
 
-#endif  // SPIRV_TOOLS_MESSAGE_H_
+#endif  // SOURCE_UTIL_MAKE_UNIQUE_H_

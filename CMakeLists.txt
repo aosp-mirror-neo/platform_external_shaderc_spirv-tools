@@ -29,8 +29,10 @@ enable_testing()
 set(SPIRV_TOOLS "SPIRV-Tools")
 
 include(GNUInstallDirs)
+include(cmake/setup_build.cmake)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_STANDARD 11)
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
   add_definitions(-DSPIRV_LINUX)
@@ -67,11 +69,15 @@ endif()
 option(SPIRV_BUILD_COMPRESSION "Build SPIR-V compressing codec" OFF)
 
 option(SPIRV_WERROR "Enable error on warning" ON)
-if(("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang"))
+if(("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR (("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang") AND (NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
   set(COMPILER_IS_LIKE_GNU TRUE)
 endif()
 if(${COMPILER_IS_LIKE_GNU})
-  set(SPIRV_WARNINGS -Wall -Wextra -Wnon-virtual-dtor -Wno-missing-field-initializers -Wno-self-assign)
+  set(SPIRV_WARNINGS -Wall -Wextra -Wnon-virtual-dtor -Wno-missing-field-initializers)
+
+  if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    set(SPIRV_WARNINGS ${SPIRV_WARNINGS} -Wno-self-assign)
+  endif()
 
   option(SPIRV_WARN_EVERYTHING "Enable -Weverything" ${SPIRV_WARN_EVERYTHING})
   if(${SPIRV_WARN_EVERYTHING})
@@ -97,7 +103,6 @@ elseif(MSVC)
   endif()
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/source)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 
 option(SPIRV_COLOR_TERMINAL "Enable color terminal output" ON)

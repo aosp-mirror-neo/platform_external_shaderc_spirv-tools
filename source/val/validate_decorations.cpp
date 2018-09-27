@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "source/diagnostic.h"
 #include "source/opcode.h"
@@ -29,8 +30,6 @@
 namespace spvtools {
 namespace val {
 namespace {
-
-using std::make_pair;
 
 // Distinguish between row and column major matrix layouts.
 enum MatrixLayout { kRowMajor, kColumnMajor };
@@ -200,7 +199,8 @@ uint32_t getBaseAlignment(uint32_t member_id, bool roundUp,
       for (uint32_t memberIdx = 0, numMembers = uint32_t(members.size());
            memberIdx < numMembers; ++memberIdx) {
         const auto id = members[memberIdx];
-        const auto& constraint = constraints[make_pair(member_id, memberIdx)];
+        const auto& constraint =
+            constraints[std::make_pair(member_id, memberIdx)];
         baseAlignment = std::max(
             baseAlignment,
             getBaseAlignment(id, roundUp, constraint, constraints, vstate));
@@ -284,7 +284,7 @@ uint32_t getSize(uint32_t member_id, bool roundUp,
       // This check depends on the fact that all members have offsets.  This
       // has been checked earlier in the flow.
       assert(offset != 0xffffffff);
-      const auto& constraint = constraints[make_pair(lastMember, lastIdx)];
+      const auto& constraint = constraints[std::make_pair(lastMember, lastIdx)];
       return offset +
              getSize(lastMember, roundUp, constraint, constraints, vstate);
     }
@@ -336,7 +336,7 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
   auto fail = [&vstate, struct_id, storage_class_str, decoration_str,
                blockRules](uint32_t member_idx) -> DiagnosticStream {
     DiagnosticStream ds =
-        std::move(vstate.diag(SPV_ERROR_INVALID_ID)
+        std::move(vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(struct_id))
                   << "Structure id " << struct_id << " decorated as "
                   << decoration_str << " for variable in " << storage_class_str
                   << " storage class must follow standard "
@@ -350,8 +350,6 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
 
   // To check for member overlaps, we want to traverse the members in
   // offset order.
-  const bool permit_non_monotonic_member_offsets =
-      vstate.features().non_monotonic_struct_member_offsets;
   struct MemberOffsetPair {
     uint32_t member;
     uint32_t offset;
@@ -381,7 +379,6 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
       });
 
   // Now scan from lowest offest to highest offset.
-  uint32_t prevOffset = 0;
   uint32_t nextValidOffset = 0;
   for (size_t ordered_member_idx = 0;
        ordered_member_idx < member_offsets.size(); ordered_member_idx++) {
@@ -390,7 +387,7 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
     const auto offset = member_offset.offset;
     auto id = members[member_offset.member];
     const LayoutConstraints& constraint =
-        constraints[make_pair(struct_id, uint32_t(memberIdx))];
+        constraints[std::make_pair(struct_id, uint32_t(memberIdx))];
     const auto alignment =
         getBaseAlignment(id, blockRules, constraint, constraints, vstate);
     const auto inst = vstate.FindDef(id);
@@ -416,19 +413,6 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
       if (!IsAlignedTo(offset, alignment)) {
         return fail(memberIdx)
                << "at offset " << offset << " is not aligned to " << alignment;
-      }
-    }
-    // SPIR-V requires struct members to be specified in memory address order,
-    // and they should not overlap.  Vulkan relaxes that rule.
-    if (!permit_non_monotonic_member_offsets) {
-      const auto out_of_order =
-          ordered_member_idx > 0 &&
-          (memberIdx < member_offsets[ordered_member_idx - 1].member);
-      if (out_of_order) {
-        return fail(memberIdx)
-               << "at offset " << offset << " has a higher offset than member "
-               << member_offsets[ordered_member_idx - 1].member << " at offset "
-               << prevOffset;
       }
     }
     if (offset < nextValidOffset)
@@ -483,7 +467,6 @@ spv_result_t checkLayout(uint32_t struct_id, const char* storage_class_str,
       // or array.
       nextValidOffset = align(nextValidOffset, alignment);
     }
-    prevOffset = offset;
   }
   return SPV_SUCCESS;
 }
@@ -538,14 +521,16 @@ spv_result_t CheckLinkageAttrOfFunctions(ValidationState_t& vstate) {
       // A function declaration (an OpFunction with no basic blocks), must have
       // a Linkage Attributes Decoration with the Import Linkage Type.
       if (!hasImportLinkageAttribute(function.id(), vstate)) {
-        return vstate.diag(SPV_ERROR_INVALID_BINARY)
+        return vstate.diag(SPV_ERROR_INVALID_BINARY,
+                           vstate.FindDef(function.id()))
                << "Function declaration (id " << function.id()
                << ") must have a LinkageAttributes decoration with the Import "
                   "Linkage type.";
       }
     } else {
       if (hasImportLinkageAttribute(function.id(), vstate)) {
-        return vstate.diag(SPV_ERROR_INVALID_BINARY)
+        return vstate.diag(SPV_ERROR_INVALID_BINARY,
+                           vstate.FindDef(function.id()))
                << "Function definition (id " << function.id()
                << ") may not be decorated with Import Linkage type.";
       }
@@ -565,7 +550,7 @@ spv_result_t CheckImportedVariableInitialization(ValidationState_t& vstate) {
     auto variable_instr = vstate.FindDef(global_var_id);
     if (variable_instr->words().size() == 5u &&
         hasImportLinkageAttribute(global_var_id, vstate)) {
-      return vstate.diag(SPV_ERROR_INVALID_ID)
+      return vstate.diag(SPV_ERROR_INVALID_ID, variable_instr)
              << "A module-scope OpVariable with initialization value "
                 "cannot be marked with the Import Linkage Type.";
     }
@@ -580,7 +565,7 @@ spv_result_t CheckBuiltInVariable(uint32_t var_id, ValidationState_t& vstate) {
     if (spvIsVulkanEnv(vstate.context()->target_env)) {
       if (d.dec_type() == SpvDecorationLocation ||
           d.dec_type() == SpvDecorationComponent) {
-        return vstate.diag(SPV_ERROR_INVALID_ID)
+        return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(var_id))
                << "A BuiltIn variable (id " << var_id
                << ") cannot have any Location or Component decorations";
       }
@@ -598,12 +583,24 @@ spv_result_t CheckDecorationsOfEntryPoints(ValidationState_t& vstate) {
     for (const auto& desc : descs) {
       for (auto interface : desc.interfaces) {
         Instruction* var_instr = vstate.FindDef(interface);
-        if (SpvOpVariable != var_instr->opcode()) {
-          return vstate.diag(SPV_ERROR_INVALID_ID)
+        if (!var_instr || SpvOpVariable != var_instr->opcode()) {
+          return vstate.diag(SPV_ERROR_INVALID_ID, var_instr)
                  << "Interfaces passed to OpEntryPoint must be of type "
                     "OpTypeVariable. Found Op"
                  << spvOpcodeString(var_instr->opcode()) << ".";
         }
+        const SpvStorageClass storage_class =
+            var_instr->GetOperandAs<SpvStorageClass>(2);
+        if (storage_class != SpvStorageClassInput &&
+            storage_class != SpvStorageClassOutput) {
+          return vstate.diag(SPV_ERROR_INVALID_ID, var_instr)
+                 << "OpEntryPoint interfaces must be OpVariables with "
+                    "Storage Class of Input(1) or Output(3). Found Storage "
+                    "Class "
+                 << storage_class << " for Entry Point id " << entry_point
+                 << ".";
+        }
+
         const uint32_t ptr_id = var_instr->word(1);
         Instruction* ptr_instr = vstate.FindDef(ptr_id);
         // It is guaranteed (by validator ID checks) that ptr_instr is
@@ -611,17 +608,6 @@ spv_result_t CheckDecorationsOfEntryPoints(ValidationState_t& vstate) {
         // to.
         const uint32_t type_id = ptr_instr->word(3);
         Instruction* type_instr = vstate.FindDef(type_id);
-        const auto storage_class =
-            static_cast<SpvStorageClass>(var_instr->word(3));
-        if (storage_class != SpvStorageClassInput &&
-            storage_class != SpvStorageClassOutput) {
-          return vstate.diag(SPV_ERROR_INVALID_ID)
-                 << "OpEntryPoint interfaces must be OpVariables with "
-                    "Storage Class of Input(1) or Output(3). Found Storage "
-                    "Class "
-                 << storage_class << " for Entry Point id " << entry_point
-                 << ".";
-        }
         if (type_instr && SpvOpTypeStruct == type_instr->opcode() &&
             isBuiltInStruct(type_id, vstate)) {
           if (storage_class == SpvStorageClassInput) ++num_builtin_inputs;
@@ -635,7 +621,8 @@ spv_result_t CheckDecorationsOfEntryPoints(ValidationState_t& vstate) {
         }
       }
       if (num_builtin_inputs > 1 || num_builtin_outputs > 1) {
-        return vstate.diag(SPV_ERROR_INVALID_BINARY)
+        return vstate.diag(SPV_ERROR_INVALID_BINARY,
+                           vstate.FindDef(entry_point))
                << "There must be at most one object per Storage Class that can "
                   "contain a structure type containing members decorated with "
                   "BuiltIn, consumed per entry-point. Entry Point id "
@@ -647,7 +634,8 @@ spv_result_t CheckDecorationsOfEntryPoints(ValidationState_t& vstate) {
         if (SpvDecorationLinkageAttributes == decoration.dec_type()) {
           const char* linkage_name =
               reinterpret_cast<const char*>(&decoration.params()[0]);
-          return vstate.diag(SPV_ERROR_INVALID_BINARY)
+          return vstate.diag(SPV_ERROR_INVALID_BINARY,
+                             vstate.FindDef(entry_point))
                  << "The LinkageAttributes Decoration (Linkage name: "
                  << linkage_name << ") cannot be applied to function id "
                  << entry_point
@@ -660,13 +648,12 @@ spv_result_t CheckDecorationsOfEntryPoints(ValidationState_t& vstate) {
 }
 
 spv_result_t CheckDescriptorSetArrayOfArrays(ValidationState_t& vstate) {
-  for (const auto& def : vstate.all_definitions()) {
-    const auto inst = def.second;
-    if (SpvOpVariable != inst->opcode()) continue;
+  for (const auto& inst : vstate.ordered_instructions()) {
+    if (SpvOpVariable != inst.opcode()) continue;
 
     // Verify this variable is a DescriptorSet
     bool has_descriptor_set = false;
-    for (const auto& decoration : vstate.id_decorations(def.first)) {
+    for (const auto& decoration : vstate.id_decorations(inst.id())) {
       if (SpvDecorationDescriptorSet == decoration.dec_type()) {
         has_descriptor_set = true;
         break;
@@ -674,7 +661,7 @@ spv_result_t CheckDescriptorSetArrayOfArrays(ValidationState_t& vstate) {
     }
     if (!has_descriptor_set) continue;
 
-    const auto* ptrInst = vstate.FindDef(inst->word(1));
+    const auto* ptrInst = vstate.FindDef(inst.word(1));
     assert(SpvOpTypePointer == ptrInst->opcode());
 
     // Check for a first level array
@@ -688,7 +675,7 @@ spv_result_t CheckDescriptorSetArrayOfArrays(ValidationState_t& vstate) {
     const auto secondaryTypePtr = vstate.FindDef(typePtr->word(2));
     if (SpvOpTypeRuntimeArray == secondaryTypePtr->opcode() ||
         SpvOpTypeArray == secondaryTypePtr->opcode()) {
-      return vstate.diag(SPV_ERROR_INVALID_ID)
+      return vstate.diag(SPV_ERROR_INVALID_ID, &inst)
              << "Only a single level of array is allowed for descriptor "
                 "set variables";
     }
@@ -714,7 +701,7 @@ void ComputeMemberConstraintsForStruct(MemberConstraints* constraints,
   for (uint32_t memberIdx = 0, numMembers = uint32_t(members.size());
        memberIdx < numMembers; memberIdx++) {
     LayoutConstraints& constraint =
-        (*constraints)[make_pair(struct_id, memberIdx)];
+        (*constraints)[std::make_pair(struct_id, memberIdx)];
     constraint = inherited;
     for (auto& decoration : vstate.id_decorations(struct_id)) {
       if (decoration.struct_member_index() == (int)memberIdx) {
@@ -778,10 +765,9 @@ void ComputeMemberConstraintsForArray(MemberConstraints* constraints,
 }
 
 spv_result_t CheckDecorationsOfBuffers(ValidationState_t& vstate) {
-  for (const auto& def : vstate.all_definitions()) {
-    const auto inst = def.second;
-    const auto& words = inst->words();
-    if (SpvOpVariable == inst->opcode()) {
+  for (const auto& inst : vstate.ordered_instructions()) {
+    const auto& words = inst.words();
+    if (SpvOpVariable == inst.opcode()) {
       // For storage class / decoration combinations, see Vulkan 14.5.4 "Offset
       // and Stride Assignment".
       const auto storageClass = words[3];
@@ -811,27 +797,27 @@ spv_result_t CheckDecorationsOfBuffers(ValidationState_t& vstate) {
             const char* deco_str = blockDeco ? "Block" : "BufferBlock";
             spv_result_t recursive_status = SPV_SUCCESS;
             if (isMissingOffsetInStruct(id, vstate)) {
-              return vstate.diag(SPV_ERROR_INVALID_ID)
+              return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(id))
                      << "Structure id " << id << " decorated as " << deco_str
                      << " must be explicitly laid out with Offset decorations.";
             } else if (hasDecoration(id, SpvDecorationGLSLShared, vstate)) {
-              return vstate.diag(SPV_ERROR_INVALID_ID)
+              return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(id))
                      << "Structure id " << id << " decorated as " << deco_str
                      << " must not use GLSLShared decoration.";
             } else if (hasDecoration(id, SpvDecorationGLSLPacked, vstate)) {
-              return vstate.diag(SPV_ERROR_INVALID_ID)
+              return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(id))
                      << "Structure id " << id << " decorated as " << deco_str
                      << " must not use GLSLPacked decoration.";
             } else if (!checkForRequiredDecoration(id, SpvDecorationArrayStride,
                                                    SpvOpTypeArray, vstate)) {
-              return vstate.diag(SPV_ERROR_INVALID_ID)
+              return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(id))
                      << "Structure id " << id << " decorated as " << deco_str
                      << " must be explicitly laid out with ArrayStride "
                         "decorations.";
             } else if (!checkForRequiredDecoration(id,
                                                    SpvDecorationMatrixStride,
                                                    SpvOpTypeMatrix, vstate)) {
-              return vstate.diag(SPV_ERROR_INVALID_ID)
+              return vstate.diag(SPV_ERROR_INVALID_ID, vstate.FindDef(id))
                      << "Structure id " << id << " decorated as " << deco_str
                      << " must be explicitly laid out with MatrixStride "
                         "decorations.";
@@ -854,6 +840,34 @@ spv_result_t CheckDecorationsOfBuffers(ValidationState_t& vstate) {
   return SPV_SUCCESS;
 }
 
+spv_result_t CheckVulkanMemoryModelDeprecatedDecorations(
+    ValidationState_t& vstate) {
+  if (vstate.memory_model() != SpvMemoryModelVulkanKHR) return SPV_SUCCESS;
+
+  std::string msg;
+  std::ostringstream str(msg);
+  for (const auto& def : vstate.all_definitions()) {
+    const auto inst = def.second;
+    const auto id = inst->id();
+    for (const auto& dec : vstate.id_decorations(id)) {
+      const auto member = dec.struct_member_index();
+      if (dec.dec_type() == SpvDecorationCoherent ||
+          dec.dec_type() == SpvDecorationVolatile) {
+        str << (dec.dec_type() == SpvDecorationCoherent ? "Coherent"
+                                                        : "Volatile");
+        str << " decoration targeting " << vstate.getIdName(id);
+        if (member != Decoration::kInvalidMember) {
+          str << " (member index " << member << ")";
+        }
+        str << " is banned when using the Vulkan memory model.";
+        return vstate.diag(SPV_ERROR_INVALID_ID, inst) << str.str();
+      }
+    }
+  }
+
+  return SPV_SUCCESS;
+}
+
 }  // namespace
 
 // Validates that decorations have been applied properly.
@@ -863,6 +877,8 @@ spv_result_t ValidateDecorations(ValidationState_t& vstate) {
   if (auto error = CheckDecorationsOfBuffers(vstate)) return error;
   if (auto error = CheckLinkageAttrOfFunctions(vstate)) return error;
   if (auto error = CheckDescriptorSetArrayOfArrays(vstate)) return error;
+  if (auto error = CheckVulkanMemoryModelDeprecatedDecorations(vstate))
+    return error;
   return SPV_SUCCESS;
 }
 

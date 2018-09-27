@@ -17,6 +17,7 @@
 #include "source/val/validate.h"
 
 #include <cassert>
+#include <string>
 #include <unordered_set>
 
 #include "source/diagnostic.h"
@@ -82,6 +83,7 @@ bool IsSupportOptionalVulkan_1_0(uint32_t capability) {
     case SpvCapabilityStorageImageReadWithoutFormat:
     case SpvCapabilityStorageImageWriteWithoutFormat:
     case SpvCapabilityMultiViewport:
+    case SpvCapabilityInt64Atomics:
       return true;
   }
   return false;
@@ -220,19 +222,17 @@ bool IsEnabledByCapabilityOpenCL_2_0(ValidationState_t& _,
 
 // Validates that capability declarations use operands allowed in the current
 // context.
-spv_result_t CapabilityPass(ValidationState_t& _,
-                            const spv_parsed_instruction_t* inst) {
-  const SpvOp opcode = static_cast<SpvOp>(inst->opcode);
-  if (opcode != SpvOpCapability) return SPV_SUCCESS;
+spv_result_t CapabilityPass(ValidationState_t& _, const Instruction* inst) {
+  if (inst->opcode() != SpvOpCapability) return SPV_SUCCESS;
 
-  assert(inst->num_operands == 1);
+  assert(inst->operands().size() == 1);
 
-  const spv_parsed_operand_t& operand = inst->operands[0];
+  const spv_parsed_operand_t& operand = inst->operand(0);
 
   assert(operand.num_words == 1);
-  assert(operand.offset < inst->num_words);
+  assert(operand.offset < inst->words().size());
 
-  const uint32_t capability = inst->words[operand.offset];
+  const uint32_t capability = inst->word(operand.offset);
   const auto capability_str = [&_, capability]() {
     spv_operand_desc desc = nullptr;
     if (_.grammar().lookupOperand(SPV_OPERAND_TYPE_CAPABILITY, capability,
@@ -253,7 +253,7 @@ spv_result_t CapabilityPass(ValidationState_t& _,
     if (!IsSupportGuaranteedVulkan_1_0(capability) &&
         !IsSupportOptionalVulkan_1_0(capability) &&
         !IsEnabledByExtension(_, capability)) {
-      return _.diag(SPV_ERROR_INVALID_CAPABILITY)
+      return _.diag(SPV_ERROR_INVALID_CAPABILITY, inst)
              << "Capability " << capability_str()
              << " is not allowed by Vulkan 1.0 specification"
              << " (or requires extension)";
@@ -262,7 +262,7 @@ spv_result_t CapabilityPass(ValidationState_t& _,
     if (!IsSupportGuaranteedVulkan_1_1(capability) &&
         !IsSupportOptionalVulkan_1_1(capability) &&
         !IsEnabledByExtension(_, capability)) {
-      return _.diag(SPV_ERROR_INVALID_CAPABILITY)
+      return _.diag(SPV_ERROR_INVALID_CAPABILITY, inst)
              << "Capability " << capability_str()
              << " is not allowed by Vulkan 1.1 specification"
              << " (or requires extension)";
@@ -272,7 +272,7 @@ spv_result_t CapabilityPass(ValidationState_t& _,
         !IsSupportOptionalOpenCL_1_2(capability) &&
         !IsEnabledByExtension(_, capability) &&
         !IsEnabledByCapabilityOpenCL_1_2(_, capability)) {
-      return _.diag(SPV_ERROR_INVALID_CAPABILITY)
+      return _.diag(SPV_ERROR_INVALID_CAPABILITY, inst)
              << "Capability " << capability_str()
              << " is not allowed by OpenCL 1.2 " << opencl_profile
              << " Profile specification"
@@ -284,7 +284,7 @@ spv_result_t CapabilityPass(ValidationState_t& _,
         !IsSupportOptionalOpenCL_1_2(capability) &&
         !IsEnabledByExtension(_, capability) &&
         !IsEnabledByCapabilityOpenCL_2_0(_, capability)) {
-      return _.diag(SPV_ERROR_INVALID_CAPABILITY)
+      return _.diag(SPV_ERROR_INVALID_CAPABILITY, inst)
              << "Capability " << capability_str()
              << " is not allowed by OpenCL 2.0/2.1 " << opencl_profile
              << " Profile specification"
@@ -295,7 +295,7 @@ spv_result_t CapabilityPass(ValidationState_t& _,
         !IsSupportOptionalOpenCL_1_2(capability) &&
         !IsEnabledByExtension(_, capability) &&
         !IsEnabledByCapabilityOpenCL_2_0(_, capability)) {
-      return _.diag(SPV_ERROR_INVALID_CAPABILITY)
+      return _.diag(SPV_ERROR_INVALID_CAPABILITY, inst)
              << "Capability " << capability_str()
              << " is not allowed by OpenCL 2.2 " << opencl_profile
              << " Profile specification"

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_spirv.h"
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "source/operand.h"
+#include "test/unit_spirv.h"
 
 namespace spvtools {
 namespace {
@@ -88,9 +89,11 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::ValuesIn(std::vector<MaskExpansionCase>{
         // No bits means no change.
         {SPV_OPERAND_TYPE_OPTIONAL_MEMORY_ACCESS, 0, {PREFIX0}, {PREFIX0}},
-        // Unknown bits means no change.
+        // Unknown bits means no change.  Use all bits that aren't in the
+        // grammar.
+        // The last mask enum is 0x20
         {SPV_OPERAND_TYPE_OPTIONAL_MEMORY_ACCESS,
-         0xfffffffc,
+         0xffffffc0,
          {PREFIX1},
          {PREFIX1}},
         // Volatile has no operands.

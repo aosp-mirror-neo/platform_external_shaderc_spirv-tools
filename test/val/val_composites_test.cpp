@@ -16,8 +16,8 @@
 #include <string>
 
 #include "gmock/gmock.h"
-#include "unit_spirv.h"
-#include "val_fixtures.h"
+#include "test/unit_spirv.h"
+#include "test/val/val_fixtures.h"
 
 namespace spvtools {
 namespace val {
@@ -149,15 +149,14 @@ OpMemoryModel Logical GLSL450
 ; }
 
 %f32arr = OpTypeRuntimeArray %float
-%bool = OpTypeBool
 %v4float = OpTypeVector %float 4
 %array5_mat4x3 = OpTypeArray %mat4x3 %int_5
 %array5_vec4 = OpTypeArray %v4float %int_5
 %_ptr_Uniform_float = OpTypePointer Uniform %float
 %_ptr_Function_vec4 = OpTypePointer Function %v4float
 %_ptr_Uniform_vec4 = OpTypePointer Uniform %v4float
-%struct_s = OpTypeStruct %bool %array5_vec4 %int %array5_mat4x3
-%struct_blockName = OpTypeStruct %struct_s %bool %f32arr
+%struct_s = OpTypeStruct %int %array5_vec4 %int %array5_mat4x3
+%struct_blockName = OpTypeStruct %struct_s %int %f32arr
 %_ptr_Uniform_blockName = OpTypePointer Uniform %struct_blockName
 %_ptr_Uniform_struct_s = OpTypePointer Uniform %struct_s
 %_ptr_Uniform_array5_mat4x3 = OpTypePointer Uniform %array5_mat4x3
@@ -187,8 +186,7 @@ TEST_F(ValidateComposites, VectorExtractDynamicWrongResultType) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorExtractDynamic: "
-                        "expected Result Type to be a scalar type"));
+              HasSubstr("Expected Result Type to be a scalar type"));
 }
 
 TEST_F(ValidateComposites, VectorExtractDynamicNotVector) {
@@ -199,8 +197,7 @@ TEST_F(ValidateComposites, VectorExtractDynamicNotVector) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorExtractDynamic: "
-                        "expected Vector type to be OpTypeVector"));
+              HasSubstr("Expected Vector type to be OpTypeVector"));
 }
 
 TEST_F(ValidateComposites, VectorExtractDynamicWrongVectorComponent) {
@@ -212,8 +209,7 @@ TEST_F(ValidateComposites, VectorExtractDynamicWrongVectorComponent) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("VectorExtractDynamic: "
-                "expected Vector component type to be equal to Result Type"));
+      HasSubstr("Expected Vector component type to be equal to Result Type"));
 }
 
 TEST_F(ValidateComposites, VectorExtractDynamicWrongIndexType) {
@@ -224,8 +220,7 @@ TEST_F(ValidateComposites, VectorExtractDynamicWrongIndexType) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorExtractDynamic: "
-                        "expected Index to be int scalar"));
+              HasSubstr("Expected Index to be int scalar"));
 }
 
 TEST_F(ValidateComposites, VectorInsertDynamicSuccess) {
@@ -245,8 +240,7 @@ TEST_F(ValidateComposites, VectorInsertDynamicWrongResultType) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorInsertDynamic: "
-                        "expected Result Type to be OpTypeVector"));
+              HasSubstr("Expected Result Type to be OpTypeVector"));
 }
 
 TEST_F(ValidateComposites, VectorInsertDynamicNotVector) {
@@ -257,8 +251,7 @@ TEST_F(ValidateComposites, VectorInsertDynamicNotVector) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorInsertDynamic: "
-                        "expected Vector type to be equal to Result Type"));
+              HasSubstr("Expected Vector type to be equal to Result Type"));
 }
 
 TEST_F(ValidateComposites, VectorInsertDynamicWrongComponentType) {
@@ -269,8 +262,7 @@ TEST_F(ValidateComposites, VectorInsertDynamicWrongComponentType) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorInsertDynamic: "
-                        "expected Component type to be equal to Result Type "
+              HasSubstr("Expected Component type to be equal to Result Type "
                         "component type"));
 }
 
@@ -282,8 +274,7 @@ TEST_F(ValidateComposites, VectorInsertDynamicWrongIndexType) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("VectorInsertDynamic: "
-                        "expected Index to be int scalar"));
+              HasSubstr("Expected Index to be int scalar"));
 }
 
 TEST_F(ValidateComposites, CompositeConstructNotComposite) {
@@ -294,8 +285,7 @@ TEST_F(ValidateComposites, CompositeConstructNotComposite) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeConstruct: "
-                        "expected Result Type to be a composite type"));
+              HasSubstr("Expected Result Type to be a composite type"));
 }
 
 TEST_F(ValidateComposites, CompositeConstructVectorSuccess) {
@@ -318,8 +308,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorOnlyOneConstituent) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeConstruct: "
-                        "expected number of constituents to be at least 2"));
+              HasSubstr("Expected number of constituents to be at least 2"));
 }
 
 TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituent1) {
@@ -331,8 +320,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituent1) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected Constituents to be scalars or vectors of the same "
+      HasSubstr("Expected Constituents to be scalars or vectors of the same "
                 "type as Result Type components"));
 }
 
@@ -345,8 +333,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituent2) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected Constituents to be scalars or vectors of the same "
+      HasSubstr("Expected Constituents to be scalars or vectors of the same "
                 "type as Result Type components"));
 }
 
@@ -359,8 +346,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituent3) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected Constituents to be scalars or vectors of the same "
+      HasSubstr("Expected Constituents to be scalars or vectors of the same "
                 "type as Result Type components"));
 }
 
@@ -373,8 +359,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongComponentNumber1) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of given components to be equal to the "
+      HasSubstr("Expected total number of given components to be equal to the "
                 "size of Result Type vector"));
 }
 
@@ -387,8 +372,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongComponentNumber2) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of given components to be equal to the "
+      HasSubstr("Expected total number of given components to be equal to the "
                 "size of Result Type vector"));
 }
 
@@ -411,8 +395,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituentNumber1) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of columns of Result Type matrix"));
 }
 
@@ -425,8 +408,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituentNumber2) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of columns of Result Type matrix"));
 }
 
@@ -439,8 +421,7 @@ TEST_F(ValidateComposites, CompositeConstructVectorWrongConsituent) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected Constituent type to be equal to the column type "
+      HasSubstr("Expected Constituent type to be equal to the column type "
                 "Result Type matrix"));
 }
 
@@ -462,8 +443,7 @@ TEST_F(ValidateComposites, CompositeConstructArrayWrongConsituentNumber1) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of elements of Result Type array"));
 }
 
@@ -476,8 +456,7 @@ TEST_F(ValidateComposites, CompositeConstructArrayWrongConsituentNumber2) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of elements of Result Type array"));
 }
 
@@ -490,8 +469,7 @@ TEST_F(ValidateComposites, CompositeConstructArrayWrongConsituent) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected Constituent type to be equal to the column type "
+      HasSubstr("Expected Constituent type to be equal to the column type "
                 "Result Type array"));
 }
 
@@ -513,8 +491,7 @@ TEST_F(ValidateComposites, CompositeConstructStructWrongConstituentNumber1) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of members of Result Type struct"));
 }
 
@@ -527,8 +504,7 @@ TEST_F(ValidateComposites, CompositeConstructStructWrongConstituentNumber2) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CompositeConstruct: "
-                "expected total number of Constituents to be equal to the "
+      HasSubstr("Expected total number of Constituents to be equal to the "
                 "number of members of Result Type struct"));
 }
 
@@ -540,8 +516,7 @@ TEST_F(ValidateComposites, CompositeConstructStructWrongConstituent) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeConstruct: "
-                        "expected Constituent type to be equal to the "
+              HasSubstr("Expected Constituent type to be equal to the "
                         "corresponding member type of Result Type struct"));
 }
 
@@ -561,9 +536,8 @@ TEST_F(ValidateComposites, CopyObjectResultTypeNotType) {
 )";
 
   CompileSuccessfully(GenerateShaderCode(body).c_str());
-  ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
-  EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CopyObject: expected Result Type to be a type"));
+  ASSERT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
+  EXPECT_THAT(getDiagnosticString(), HasSubstr("ID 19 is not a type id"));
 }
 
 TEST_F(ValidateComposites, CopyObjectWrongOperandType) {
@@ -575,8 +549,7 @@ TEST_F(ValidateComposites, CopyObjectWrongOperandType) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("CopyObject: "
-                "expected Result Type and Operand type to be the same"));
+      HasSubstr("Expected Result Type and Operand type to be the same"));
 }
 
 TEST_F(ValidateComposites, TransposeSuccess) {
@@ -597,7 +570,7 @@ TEST_F(ValidateComposites, TransposeResultTypeNotMatrix) {
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("Transpose: expected Result Type to be a matrix type"));
+              HasSubstr("Expected Result Type to be a matrix type"));
 }
 
 TEST_F(ValidateComposites, TransposeDifferentComponentTypes) {
@@ -609,8 +582,7 @@ TEST_F(ValidateComposites, TransposeDifferentComponentTypes) {
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("Transpose: "
-                "expected component types of Matrix and Result Type to be "
+      HasSubstr("Expected component types of Matrix and Result Type to be "
                 "identical"));
 }
 
@@ -621,10 +593,9 @@ TEST_F(ValidateComposites, TransposeIncompatibleDimensions1) {
 
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
-  EXPECT_THAT(
-      getDiagnosticString(),
-      HasSubstr("Transpose: expected number of columns and the column size "
-                "of Matrix to be the reverse of those of Result Type"));
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Expected number of columns and the column size "
+                        "of Matrix to be the reverse of those of Result Type"));
 }
 
 TEST_F(ValidateComposites, TransposeIncompatibleDimensions2) {
@@ -634,10 +605,9 @@ TEST_F(ValidateComposites, TransposeIncompatibleDimensions2) {
 
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
-  EXPECT_THAT(
-      getDiagnosticString(),
-      HasSubstr("Transpose: expected number of columns and the column size "
-                "of Matrix to be the reverse of those of Result Type"));
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Expected number of columns and the column size "
+                        "of Matrix to be the reverse of those of Result Type"));
 }
 
 TEST_F(ValidateComposites, TransposeIncompatibleDimensions3) {
@@ -647,10 +617,9 @@ TEST_F(ValidateComposites, TransposeIncompatibleDimensions3) {
 
   CompileSuccessfully(GenerateShaderCode(body).c_str());
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
-  EXPECT_THAT(
-      getDiagnosticString(),
-      HasSubstr("Transpose: expected number of columns and the column size "
-                "of Matrix to be the reverse of those of Result Type"));
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Expected number of columns and the column size "
+                        "of Matrix to be the reverse of those of Result Type"));
 }
 
 TEST_F(ValidateComposites, CompositeExtractSuccess) {
@@ -690,7 +659,7 @@ TEST_F(ValidateComposites, CompositeExtractNotObject) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: expected Composite to be an object "
+              HasSubstr("Expected Composite to be an object "
                         "of composite type"));
 }
 
@@ -702,8 +671,8 @@ TEST_F(ValidateComposites, CompositeExtractNotComposite) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract reached non-composite type while "
-                        "indexes still remain to be traversed."));
+              HasSubstr("Reached non-composite type while indexes still remain "
+                        "to be traversed."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractVectorOutOfBounds) {
@@ -714,7 +683,7 @@ TEST_F(ValidateComposites, CompositeExtractVectorOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 4, but access index is 4"));
 }
 
@@ -726,7 +695,7 @@ TEST_F(ValidateComposites, CompositeExtractMatrixOutOfCols) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: matrix access is out of bounds, "
+              HasSubstr("Matrix access is out of bounds, "
                         "matrix has 3 columns, but access index is 3"));
 }
 
@@ -738,7 +707,7 @@ TEST_F(ValidateComposites, CompositeExtractMatrixOutOfRows) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 2, but access index is 5"));
 }
 
@@ -751,7 +720,7 @@ TEST_F(ValidateComposites, CompositeExtractArrayOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: array access is out of bounds, "
+              HasSubstr("Array access is out of bounds, "
                         "array size is 3, but access index is 3"));
 }
 
@@ -764,9 +733,9 @@ TEST_F(ValidateComposites, CompositeExtractStructOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("Index is out of bounds: OpCompositeExtract can not "
-                        "find index 6 into the structure <id> '37'. This "
-                        "structure has 6 members. Largest valid index is 5."));
+              HasSubstr("Index is out of bounds, can not find index 6 in the "
+                        "structure <id> '37'. This structure has 6 members. "
+                        "Largest valid index is 5."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractNestedVectorOutOfBounds) {
@@ -778,7 +747,7 @@ TEST_F(ValidateComposites, CompositeExtractNestedVectorOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeExtract: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 2, but access index is 5"));
 }
 
@@ -791,7 +760,7 @@ TEST_F(ValidateComposites, CompositeExtractTooManyIndices) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract reached non-composite type while "
+              HasSubstr("Reached non-composite type while "
                         "indexes still remain to be traversed."));
 }
 
@@ -806,8 +775,8 @@ TEST_F(ValidateComposites, CompositeExtractWrongType1) {
   EXPECT_THAT(
       getDiagnosticString(),
       HasSubstr(
-          "OpCompositeExtract result type (OpTypeVector) does not match the "
-          "type that results from indexing into the composite (OpTypeFloat)."));
+          "Result type (OpTypeVector) does not match the type that results "
+          "from indexing into the composite (OpTypeFloat)."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractWrongType2) {
@@ -819,9 +788,9 @@ TEST_F(ValidateComposites, CompositeExtractWrongType2) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract result type (OpTypeFloat) does not "
-                        "match the type that results from indexing into the "
-                        "composite (OpTypeVector)."));
+              HasSubstr("Result type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractWrongType3) {
@@ -833,9 +802,9 @@ TEST_F(ValidateComposites, CompositeExtractWrongType3) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract result type (OpTypeFloat) does not "
-                        "match the type that results from indexing into the "
-                        "composite (OpTypeVector)."));
+              HasSubstr("Result type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractWrongType4) {
@@ -847,9 +816,9 @@ TEST_F(ValidateComposites, CompositeExtractWrongType4) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract result type (OpTypeFloat) does not "
-                        "match the type that results from indexing into the "
-                        "composite (OpTypeVector)."));
+              HasSubstr("Result type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeExtractWrongType5) {
@@ -863,7 +832,7 @@ TEST_F(ValidateComposites, CompositeExtractWrongType5) {
   EXPECT_THAT(
       getDiagnosticString(),
       HasSubstr(
-          "OpCompositeExtract result type (OpTypeFloat) does not match the "
+          "Result type (OpTypeFloat) does not match the "
           "type that results from indexing into the composite (OpTypeInt)."));
 }
 
@@ -916,8 +885,8 @@ TEST_F(ValidateComposites, CompositeInsertNotComposite) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeInsert reached non-composite type while "
-                        "indexes still remain to be traversed."));
+              HasSubstr("Reached non-composite type while indexes still remain "
+                        "to be traversed."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertVectorOutOfBounds) {
@@ -928,7 +897,7 @@ TEST_F(ValidateComposites, CompositeInsertVectorOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeInsert: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 4, but access index is 4"));
 }
 
@@ -940,7 +909,7 @@ TEST_F(ValidateComposites, CompositeInsertMatrixOutOfCols) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeInsert: matrix access is out of bounds, "
+              HasSubstr("Matrix access is out of bounds, "
                         "matrix has 3 columns, but access index is 3"));
 }
 
@@ -952,7 +921,7 @@ TEST_F(ValidateComposites, CompositeInsertMatrixOutOfRows) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeInsert: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 2, but access index is 5"));
 }
 
@@ -965,7 +934,7 @@ TEST_F(ValidateComposites, CompositeInsertArrayOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeInsert: array access is out of bounds, array "
+              HasSubstr("Array access is out of bounds, array "
                         "size is 3, but access index is 3"));
 }
 
@@ -978,9 +947,9 @@ TEST_F(ValidateComposites, CompositeInsertStructOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("Index is out of bounds: OpCompositeInsert can not "
-                        "find index 6 into the structure <id> '37'. This "
-                        "structure has 6 members. Largest valid index is 5."));
+              HasSubstr("Index is out of bounds, can not find index 6 in the "
+                        "structure <id> '37'. This structure has 6 members. "
+                        "Largest valid index is 5."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertNestedVectorOutOfBounds) {
@@ -992,7 +961,7 @@ TEST_F(ValidateComposites, CompositeInsertNestedVectorOutOfBounds) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("CompositeInsert: vector access is out of bounds, "
+              HasSubstr("Vector access is out of bounds, "
                         "vector size is 2, but access index is 5"));
 }
 
@@ -1005,8 +974,8 @@ TEST_F(ValidateComposites, CompositeInsertTooManyIndices) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeInsert reached non-composite type while "
-                        "indexes still remain to be traversed."));
+              HasSubstr("Reached non-composite type while indexes still remain "
+                        "to be traversed."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertWrongType1) {
@@ -1018,9 +987,9 @@ TEST_F(ValidateComposites, CompositeInsertWrongType1) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeVector) in OpCompositeInsert "
-                        "does not match the type that results from indexing "
-                        "into the Composite (OpTypeFloat)."));
+              HasSubstr("The Object type (OpTypeVector) does not match the "
+                        "type that results from indexing into the Composite "
+                        "(OpTypeFloat)."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertWrongType2) {
@@ -1032,9 +1001,9 @@ TEST_F(ValidateComposites, CompositeInsertWrongType2) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeFloat) in OpCompositeInsert "
-                        "does not match the type that results from indexing "
-                        "into the Composite (OpTypeVector)."));
+              HasSubstr("The Object type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertWrongType3) {
@@ -1046,9 +1015,9 @@ TEST_F(ValidateComposites, CompositeInsertWrongType3) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeFloat) in OpCompositeInsert "
-                        "does not match the type that results from indexing "
-                        "into the Composite (OpTypeVector)."));
+              HasSubstr("The Object type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertWrongType4) {
@@ -1060,9 +1029,9 @@ TEST_F(ValidateComposites, CompositeInsertWrongType4) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeFloat) in OpCompositeInsert "
-                        "does not match the type that results from indexing "
-                        "into the Composite (OpTypeVector)."));
+              HasSubstr("The Object type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeVector)."));
 }
 
 TEST_F(ValidateComposites, CompositeInsertWrongType5) {
@@ -1074,9 +1043,9 @@ TEST_F(ValidateComposites, CompositeInsertWrongType5) {
   CompileSuccessfully(GenerateShaderCode(body));
   ASSERT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeFloat) in OpCompositeInsert "
-                        "does not match the type that results from indexing "
-                        "into the Composite (OpTypeInt)."));
+              HasSubstr("The Object type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeInt)."));
 }
 
 // Tests ported from val_id_test.cpp.
@@ -1210,9 +1179,9 @@ TEST_F(ValidateComposites, CompositeExtractNoIndexesBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract result type (OpTypeFloat) does not "
-                        "match the type that results from indexing into the "
-                        "composite (OpTypeMatrix)."));
+              HasSubstr("Result type (OpTypeFloat) does not match the type "
+                        "that results from indexing into the composite "
+                        "(OpTypeMatrix)."));
 }
 
 // Valid: No Indexes were passed to OpCompositeInsert, and the type of the
@@ -1243,9 +1212,9 @@ TEST_F(ValidateComposites, CompositeInsertMissingIndexesBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("The Object type (OpTypeInt) in OpCompositeInsert does "
-                        "not match the type that results from indexing into "
-                        "the Composite (OpTypeMatrix)."));
+              HasSubstr("The Object type (OpTypeInt) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeMatrix)."));
 }
 
 // Valid: Tests that we can index into Struct, Array, Matrix, and Vector!
@@ -1299,8 +1268,8 @@ TEST_F(ValidateComposites, CompositeExtractReachedScalarBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract reached non-composite type while "
-                        "indexes still remain to be traversed."));
+              HasSubstr("Reached non-composite type while indexes still remain "
+                        "to be traversed."));
 }
 
 // Invalid. More indexes are provided than needed for OpCompositeInsert.
@@ -1323,8 +1292,8 @@ TEST_F(ValidateComposites, CompositeInsertReachedScalarBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeInsert reached non-composite type while "
-                        "indexes still remain to be traversed."));
+              HasSubstr("Reached non-composite type while indexes still remain "
+                        "to be traversed."));
 }
 
 // Invalid. Result type doesn't match the type we get from indexing into
@@ -1348,9 +1317,9 @@ TEST_F(ValidateComposites,
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("OpCompositeExtract result type (OpTypeInt) does not "
-                        "match the type that results from indexing into the "
-                        "composite (OpTypeFloat)."));
+              HasSubstr("Result type (OpTypeInt) does not match the type that "
+                        "results from indexing into the composite "
+                        "(OpTypeFloat)."));
 }
 
 // Invalid. Given object type doesn't match the type we get from indexing into
@@ -1374,9 +1343,9 @@ TEST_F(ValidateComposites, CompositeInsertObjectTypeDoesntMatchIndexedTypeBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("he Object type (OpTypeInt) in OpCompositeInsert does "
-                        "not match the type that results from indexing into "
-                        "the Composite (OpTypeFloat)."));
+              HasSubstr("The Object type (OpTypeInt) does not match the type "
+                        "that results from indexing into the Composite "
+                        "(OpTypeFloat)."));
 }
 
 // Invalid. Index into a struct is larger than the number of struct members.
@@ -1393,9 +1362,9 @@ TEST_F(ValidateComposites, CompositeExtractStructIndexOutOfBoundBad) {
   CompileSuccessfully(spirv.str());
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(getDiagnosticString(),
-              HasSubstr("Index is out of bounds: OpCompositeExtract can not "
-                        "find index 3 into the structure <id> '26'. This "
-                        "structure has 3 members. Largest valid index is 2."));
+              HasSubstr("Index is out of bounds, can not find index 3 in the "
+                        "structure <id> '25'. This structure has 3 members. "
+                        "Largest valid index is 2."));
 }
 
 // Invalid. Index into a struct is larger than the number of struct members.
@@ -1414,9 +1383,9 @@ TEST_F(ValidateComposites, CompositeInsertStructIndexOutOfBoundBad) {
   EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
   EXPECT_THAT(
       getDiagnosticString(),
-      HasSubstr("Index is out of bounds: OpCompositeInsert can not find "
-                "index 3 into the structure <id> '26'. This structure "
-                "has 3 members. Largest valid index is 2."));
+      HasSubstr("Index is out of bounds, can not find index 3 in the structure "
+                "<id> '25'. This structure has 3 members. Largest valid index "
+                "is 2."));
 }
 
 // #1403: Ensure that the default spec constant value is not used to check the

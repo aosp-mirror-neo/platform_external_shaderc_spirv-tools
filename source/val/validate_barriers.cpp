@@ -16,6 +16,8 @@
 
 #include "source/val/validate.h"
 
+#include <string>
+
 #include "source/diagnostic.h"
 #include "source/opcode.h"
 #include "source/spirv_constant.h"
@@ -37,7 +39,7 @@ spv_result_t ValidateExecutionScope(ValidationState_t& _,
   std::tie(is_int32, is_const_int32, value) = _.EvalInt32IfConst(id);
 
   if (!is_int32) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": expected Execution Scope to be a 32-bit int";
   }
@@ -48,7 +50,7 @@ spv_result_t ValidateExecutionScope(ValidationState_t& _,
 
   if (spvIsVulkanEnv(_.context()->target_env)) {
     if (value != SpvScopeWorkgroup && value != SpvScopeSubgroup) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": in Vulkan environment Execution Scope is limited to "
                 "Workgroup and Subgroup";
@@ -56,8 +58,9 @@ spv_result_t ValidateExecutionScope(ValidationState_t& _,
 
     if (_.context()->target_env != SPV_ENV_VULKAN_1_0 &&
         value != SpvScopeSubgroup) {
-      _.current_function().RegisterExecutionModelLimitation(
-          [](SpvExecutionModel model, std::string* message) {
+      _.function(inst->function()->id())
+          ->RegisterExecutionModelLimitation([](SpvExecutionModel model,
+                                                std::string* message) {
             if (model == SpvExecutionModelFragment ||
                 model == SpvExecutionModelVertex ||
                 model == SpvExecutionModelGeometry ||
@@ -89,7 +92,7 @@ spv_result_t ValidateMemoryScope(ValidationState_t& _, const Instruction* inst,
   std::tie(is_int32, is_const_int32, value) = _.EvalInt32IfConst(id);
 
   if (!is_int32) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": expected Memory Scope to be a 32-bit int";
   }
@@ -100,14 +103,14 @@ spv_result_t ValidateMemoryScope(ValidationState_t& _, const Instruction* inst,
 
   if (spvIsVulkanEnv(_.context()->target_env)) {
     if (value == SpvScopeCrossDevice) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": in Vulkan environment, Memory Scope cannot be CrossDevice";
     }
     if (_.context()->target_env == SPV_ENV_VULKAN_1_0 &&
         value != SpvScopeDevice && value != SpvScopeWorkgroup &&
         value != SpvScopeInvocation) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": in Vulkan 1.0 environment Memory Scope is limited to "
                 "Device, "
@@ -129,7 +132,7 @@ spv_result_t ValidateMemorySemantics(ValidationState_t& _,
   std::tie(is_int32, is_const_int32, value) = _.EvalInt32IfConst(id);
 
   if (!is_int32) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": expected Memory Semantics to be a 32-bit int";
   }
@@ -144,7 +147,7 @@ spv_result_t ValidateMemorySemantics(ValidationState_t& _,
                SpvMemorySemanticsSequentiallyConsistentMask));
 
   if (num_memory_order_set_bits > 1) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": Memory Semantics can have at most one of the following bits "
               "set: Acquire, Release, AcquireRelease or SequentiallyConsistent";
@@ -157,7 +160,7 @@ spv_result_t ValidateMemorySemantics(ValidationState_t& _,
                  SpvMemorySemanticsImageMemoryMask);
 
     if (opcode == SpvOpMemoryBarrier && !num_memory_order_set_bits) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": Vulkan specification requires Memory Semantics to have one "
                 "of the following bits set: Acquire, Release, AcquireRelease "
@@ -165,7 +168,7 @@ spv_result_t ValidateMemorySemantics(ValidationState_t& _,
     }
 
     if (opcode == SpvOpMemoryBarrier && !includes_storage_class) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": expected Memory Semantics to include a Vulkan-supported "
                 "storage class";
@@ -174,7 +177,7 @@ spv_result_t ValidateMemorySemantics(ValidationState_t& _,
 #if 0
     // TODO(atgoo@github.com): this check fails Vulkan CTS, reenable once fixed.
     if (opcode == SpvOpControlBarrier && value && !includes_storage_class) {
-      return _.diag(SPV_ERROR_INVALID_DATA)
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << spvOpcodeString(opcode)
              << ": expected Memory Semantics to include a Vulkan-supported "
                 "storage class if Memory Semantics is not None";
@@ -198,21 +201,24 @@ spv_result_t BarriersPass(ValidationState_t& _, const Instruction* inst) {
     case SpvOpControlBarrier: {
       if (spvVersionForTargetEnv(_.context()->target_env) <
           SPV_SPIRV_VERSION_WORD(1, 3)) {
-        _.current_function().RegisterExecutionModelLimitation(
-            [](SpvExecutionModel model, std::string* message) {
-              if (model != SpvExecutionModelTessellationControl &&
-                  model != SpvExecutionModelGLCompute &&
-                  model != SpvExecutionModelKernel) {
-                if (message) {
-                  *message =
-                      "OpControlBarrier requires one of the following "
-                      "Execution "
-                      "Models: TessellationControl, GLCompute or Kernel";
-                }
-                return false;
-              }
-              return true;
-            });
+        _.function(inst->function()->id())
+            ->RegisterExecutionModelLimitation(
+                [](SpvExecutionModel model, std::string* message) {
+                  if (model != SpvExecutionModelTessellationControl &&
+                      model != SpvExecutionModelGLCompute &&
+                      model != SpvExecutionModelKernel &&
+                      model != SpvExecutionModelTaskNV &&
+                      model != SpvExecutionModelMeshNV) {
+                    if (message) {
+                      *message =
+                          "OpControlBarrier requires one of the following "
+                          "Execution "
+                          "Models: TessellationControl, GLCompute or Kernel";
+                    }
+                    return false;
+                  }
+                  return true;
+                });
       }
 
       const uint32_t execution_scope = inst->word(1);
@@ -249,7 +255,7 @@ spv_result_t BarriersPass(ValidationState_t& _, const Instruction* inst) {
 
     case SpvOpNamedBarrierInitialize: {
       if (_.GetIdOpcode(result_type) != SpvOpTypeNamedBarrier) {
-        return _.diag(SPV_ERROR_INVALID_DATA)
+        return _.diag(SPV_ERROR_INVALID_DATA, inst)
                << spvOpcodeString(opcode)
                << ": expected Result Type to be OpTypeNamedBarrier";
       }
@@ -257,7 +263,7 @@ spv_result_t BarriersPass(ValidationState_t& _, const Instruction* inst) {
       const uint32_t subgroup_count_type = _.GetOperandTypeId(inst, 2);
       if (!_.IsIntScalarType(subgroup_count_type) ||
           _.GetBitWidth(subgroup_count_type) != 32) {
-        return _.diag(SPV_ERROR_INVALID_DATA)
+        return _.diag(SPV_ERROR_INVALID_DATA, inst)
                << spvOpcodeString(opcode)
                << ": expected Subgroup Count to be a 32-bit int";
       }
@@ -267,7 +273,7 @@ spv_result_t BarriersPass(ValidationState_t& _, const Instruction* inst) {
     case SpvOpMemoryNamedBarrier: {
       const uint32_t named_barrier_type = _.GetOperandTypeId(inst, 0);
       if (_.GetIdOpcode(named_barrier_type) != SpvOpTypeNamedBarrier) {
-        return _.diag(SPV_ERROR_INVALID_DATA)
+        return _.diag(SPV_ERROR_INVALID_DATA, inst)
                << spvOpcodeString(opcode)
                << ": expected Named Barrier to be of type OpTypeNamedBarrier";
       }

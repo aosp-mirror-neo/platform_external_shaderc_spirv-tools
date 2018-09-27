@@ -14,8 +14,8 @@
 
 // Contains utils for reading, writing and debug printing bit streams.
 
-#ifndef LIBSPIRV_UTIL_HUFFMAN_CODEC_H_
-#define LIBSPIRV_UTIL_HUFFMAN_CODEC_H_
+#ifndef SOURCE_COMP_HUFFMAN_CODEC_H_
+#define SOURCE_COMP_HUFFMAN_CODEC_H_
 
 #include <algorithm>
 #include <cassert>
@@ -27,12 +27,14 @@
 #include <queue>
 #include <sstream>
 #include <stack>
+#include <string>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace spvtools {
-namespace utils {
+namespace comp {
 
 // Used to generate and apply a Huffman coding scheme.
 // |Val| is the type of variable being encoded (for example a string or a
@@ -381,7 +383,7 @@ class HuffmanCodec {
   uint32_t next_node_id_ = 1;
 };
 
-}  // namespace utils
+}  // namespace comp
 }  // namespace spvtools
 
-#endif  // LIBSPIRV_UTIL_HUFFMAN_CODEC_H_
+#endif  // SOURCE_COMP_HUFFMAN_CODEC_H_

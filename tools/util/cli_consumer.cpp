@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Google Inc.
+// Copyright (c) 2018 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,43 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "message.h"
+#include "tools/util/cli_consumer.h"
 
-#include <sstream>
+#include <iostream>
 
 namespace spvtools {
+namespace utils {
 
-std::string StringifyMessage(spv_message_level_t level, const char* source,
-                             const spv_position_t& position,
-                             const char* message) {
-  const char* level_string = nullptr;
+void CLIMessageConsumer(spv_message_level_t level, const char*,
+                        const spv_position_t& position, const char* message) {
   switch (level) {
     case SPV_MSG_FATAL:
-      level_string = "fatal";
-      break;
     case SPV_MSG_INTERNAL_ERROR:
-      level_string = "internal error";
-      break;
     case SPV_MSG_ERROR:
-      level_string = "error";
+      std::cerr << "error: line " << position.index << ": " << message
+                << std::endl;
       break;
     case SPV_MSG_WARNING:
-      level_string = "warning";
+      std::cout << "warning: line " << position.index << ": " << message
+                << std::endl;
       break;
     case SPV_MSG_INFO:
-      level_string = "info";
+      std::cout << "info: line " << position.index << ": " << message
+                << std::endl;
       break;
-    case SPV_MSG_DEBUG:
-      level_string = "debug";
+    default:
       break;
   }
-  std::ostringstream oss;
-  oss << level_string << ": ";
-  if (source) oss << source << ":";
-  oss << position.line << ":" << position.column << ":";
-  oss << position.index << ": ";
-  if (message) oss << message;
-  return oss.str();
 }
 
+}  // namespace utils
 }  // namespace spvtools

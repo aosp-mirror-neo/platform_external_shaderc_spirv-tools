@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Google Inc.
+// Copyright (c) 2018 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef LIBSPIRV_OPT_MAKE_UNIQUE_H_
-#define LIBSPIRV_OPT_MAKE_UNIQUE_H_
+#ifndef SOURCE_UTIL_CLI_CONSUMMER_H_
+#define SOURCE_UTIL_CLI_CONSUMMER_H_
 
-#include <memory>
-#include <utility>
+#include <include/spirv-tools/libspirv.h>
 
 namespace spvtools {
+namespace utils {
 
-template <typename T, typename... Args>
-std::unique_ptr<T> MakeUnique(Args&&... args) {
-  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
+// A message consumer that can be used by command line tools like spirv-opt and
+// spirv-val to display messages.
+void CLIMessageConsumer(spv_message_level_t level, const char*,
+                        const spv_position_t& position, const char* message);
 
+}  // namespace utils
 }  // namespace spvtools
 
-#endif  // LIBSPIRV_OPT_MAKE_UNIQUE_H_
+#endif  // SOURCE_UTIL_CLI_CONSUMMER_H_

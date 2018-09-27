@@ -19,6 +19,7 @@ add_library(SPIRV-Tools-opt
   ccp_pass.h
   cfg_cleanup_pass.h
   cfg.h
+  combine_access_chains.h
   common_uniform_elim_pass.h
   compact_ids_pass.h
   composite.h
@@ -66,7 +67,6 @@ add_library(SPIRV-Tools-opt
   loop_unroller.h
   loop_utils.h
   loop_unswitch_pass.h
-  make_unique.h
   mem_pass.h
   merge_return_pass.h
   module.h
@@ -91,6 +91,7 @@ add_library(SPIRV-Tools-opt
   strength_reduction_pass.h
   strip_debug_info_pass.h
   strip_reflect_info_pass.h
+  struct_cfg_analysis.h
   tree_iterator.h
   type_manager.h
   types.h
@@ -106,6 +107,7 @@ add_library(SPIRV-Tools-opt
   ccp_pass.cpp
   cfg_cleanup_pass.cpp
   cfg.cpp
+  combine_access_chains.cpp
   common_uniform_elim_pass.cpp
   compact_ids_pass.cpp
   composite.cpp
@@ -174,6 +176,7 @@ add_library(SPIRV-Tools-opt
   strength_reduction_pass.cpp
   strip_debug_info_pass.cpp
   strip_reflect_info_pass.cpp
+  struct_cfg_analysis.cpp
   type_manager.cpp
   types.cpp
   unify_const_pass.cpp

@@ -36,7 +36,7 @@ spv_result_t ValidateExecutionScope(ValidationState_t& _,
   std::tie(is_int32, is_const_int32, value) = _.EvalInt32IfConst(scope);
 
   if (!is_int32) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": expected Execution Scope to be a 32-bit int";
   }
@@ -48,18 +48,39 @@ spv_result_t ValidateExecutionScope(ValidationState_t& _,
   if (spvIsVulkanEnv(_.context()->target_env) &&
       _.context()->target_env != SPV_ENV_VULKAN_1_0 &&
       value != SpvScopeSubgroup) {
-    return _.diag(SPV_ERROR_INVALID_DATA)
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
            << spvOpcodeString(opcode)
            << ": in Vulkan environment Execution scope is limited to "
               "Subgroup";
   }
 
   if (value != SpvScopeSubgroup && value != SpvScopeWorkgroup) {
-    return _.diag(SPV_ERROR_INVALID_DATA) << spvOpcodeString(opcode)
-                                          << ": Execution scope is limited to "
-                                             "Subgroup or Workgroup";
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
+           << spvOpcodeString(opcode)
+           << ": Execution scope is limited to Subgroup or Workgroup";
   }
 
+  return SPV_SUCCESS;
+}
+
+spv_result_t ValidateGroupNonUniformBallotBitCount(ValidationState_t& _,
+                                                   const Instruction* inst) {
+  // Scope is already checked by ValidateExecutionScope() above.
+
+  const uint32_t result_type = inst->type_id();
+  if (!_.IsUnsignedIntScalarType(result_type)) {
+    return _.diag(SPV_ERROR_INVALID_DATA, inst)
+           << "Expected Result Type to be an unsigned integer type scalar.";
+  }
+
+  const auto value = inst->GetOperandAs<uint32_t>(4);
+  const auto value_type = _.FindDef(value)->type_id();
+  if (!_.IsUnsignedIntVectorType(value_type) ||
+      _.GetDimension(value_type) != 4) {
+    return _.diag(SPV_ERROR_INVALID_DATA, inst) << "Expected Value to be a "
+                                                   "vector of four components "
+                                                   "of integer type scalar";
+  }
   return SPV_SUCCESS;
 }
 
@@ -74,6 +95,13 @@ spv_result_t NonUniformPass(ValidationState_t& _, const Instruction* inst) {
     if (auto error = ValidateExecutionScope(_, inst, execution_scope)) {
       return error;
     }
+  }
+
+  switch (opcode) {
+    case SpvOpGroupNonUniformBallotBitCount:
+      return ValidateGroupNonUniformBallotBitCount(_, inst);
+    default:
+      break;
   }
 
   return SPV_SUCCESS;

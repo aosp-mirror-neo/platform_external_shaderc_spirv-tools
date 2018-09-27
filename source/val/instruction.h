@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef LIBSPIRV_VAL_INSTRUCTION_H_
-#define LIBSPIRV_VAL_INSTRUCTION_H_
+#ifndef SOURCE_VAL_INSTRUCTION_H_
+#define SOURCE_VAL_INSTRUCTION_H_
 
 #include <cassert>
 #include <cstdint>
@@ -21,8 +21,8 @@
 #include <utility>
 #include <vector>
 
+#include "source/table.h"
 #include "spirv-tools/libspirv.h"
-#include "table.h"
 
 namespace spvtools {
 namespace val {
@@ -34,9 +34,7 @@ class Function;
 /// instruction's result id
 class Instruction {
  public:
-  explicit Instruction(const spv_parsed_instruction_t* inst,
-                       Function* defining_function = nullptr,
-                       BasicBlock* defining_block = nullptr);
+  explicit Instruction(const spv_parsed_instruction_t* inst);
 
   /// Registers the use of the Instruction in instruction \p inst at \p index
   void RegisterUse(const Instruction* inst, uint32_t index);
@@ -48,10 +46,12 @@ class Instruction {
   /// Returns the Function where the instruction was defined. nullptr if it was
   /// defined outside of a Function
   const Function* function() const { return function_; }
+  void set_function(Function* func) { function_ = func; }
 
   /// Returns the BasicBlock where the instruction was defined. nullptr if it
   /// was defined outside of a BasicBlock
   const BasicBlock* block() const { return block_; }
+  void set_block(BasicBlock* b) { block_ = b; }
 
   /// Returns a vector of pairs of all references to this instruction's result
   /// id. The first element is the instruction in which this result id was
@@ -94,20 +94,20 @@ class Instruction {
     return *reinterpret_cast<const T*>(&words_[o.offset]);
   }
 
-  int InstructionPosition() const { return instruction_position_; }
-  void SetInstructionPosition(int pos) { instruction_position_ = pos; }
+  size_t LineNum() const { return line_num_; }
+  void SetLineNum(size_t pos) { line_num_ = pos; }
 
  private:
   const std::vector<uint32_t> words_;
   const std::vector<spv_parsed_operand_t> operands_;
   spv_parsed_instruction_t inst_;
-  int instruction_position_;
+  size_t line_num_ = 0;
 
   /// The function in which this instruction was declared
-  Function* function_;
+  Function* function_ = nullptr;
 
   /// The basic block in which this instruction was declared
-  BasicBlock* block_;
+  BasicBlock* block_ = nullptr;
 
   /// This is a vector of pairs of all references to this instruction's result
   /// id. The first element is the instruction in which this result id was
@@ -116,13 +116,10 @@ class Instruction {
   std::vector<std::pair<const Instruction*, uint32_t>> uses_;
 };
 
-#define OPERATOR(OP)                                                \
-  bool operator OP(const Instruction& lhs, const Instruction& rhs); \
-  bool operator OP(const Instruction& lhs, uint32_t rhs)
-
-OPERATOR(<);
-OPERATOR(==);
-#undef OPERATOR
+bool operator<(const Instruction& lhs, const Instruction& rhs);
+bool operator<(const Instruction& lhs, uint32_t rhs);
+bool operator==(const Instruction& lhs, const Instruction& rhs);
+bool operator==(const Instruction& lhs, uint32_t rhs);
 
 }  // namespace val
 }  // namespace spvtools
@@ -140,4 +137,4 @@ struct hash<spvtools::val::Instruction> {
 
 }  // namespace std
 
-#endif  // LIBSPIRV_VAL_INSTRUCTION_H_
+#endif  // SOURCE_VAL_INSTRUCTION_H_

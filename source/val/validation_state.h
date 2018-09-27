@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef LIBSPIRV_VAL_VALIDATIONSTATE_H_
-#define LIBSPIRV_VAL_VALIDATIONSTATE_H_
+#ifndef SOURCE_VAL_VALIDATION_STATE_H_
+#define SOURCE_VAL_VALIDATION_STATE_H_
 
-#include <deque>
+#include <map>
 #include <set>
 #include <string>
 #include <tuple>
@@ -23,17 +23,17 @@
 #include <unordered_set>
 #include <vector>
 
-#include "assembly_grammar.h"
-#include "decoration.h"
-#include "diagnostic.h"
-#include "disassemble.h"
-#include "enum_set.h"
-#include "latest_version_spirv_header.h"
+#include "source/assembly_grammar.h"
+#include "source/diagnostic.h"
+#include "source/disassemble.h"
+#include "source/enum_set.h"
+#include "source/latest_version_spirv_header.h"
+#include "source/spirv_definition.h"
+#include "source/spirv_validator_options.h"
+#include "source/val/decoration.h"
+#include "source/val/function.h"
+#include "source/val/instruction.h"
 #include "spirv-tools/libspirv.h"
-#include "spirv_definition.h"
-#include "spirv_validator_options.h"
-#include "val/function.h"
-#include "val/instruction.h"
 
 namespace spvtools {
 namespace val {
@@ -83,10 +83,6 @@ class ValidationState_t {
     // Allow OpTypeInt with 8 bit width?
     bool declare_int8_type = false;
 
-    // Allow non-monotonic offsets for struct members?
-    // Vulkan permits this.
-    bool non_monotonic_struct_member_offsets = false;
-
     // Target environment uses relaxed block layout.
     // This is true for Vulkan 1.1 or later.
     bool env_relaxed_block_layout = false;
@@ -101,6 +97,18 @@ class ValidationState_t {
 
   /// Returns the command line options
   spv_const_validator_options options() const { return options_; }
+
+  /// Sets the ID of the generator for this module.
+  void setGenerator(uint32_t gen) { generator_ = gen; }
+
+  /// Returns the ID of the generator for this module.
+  uint32_t generator() const { return generator_; }
+
+  /// Sets the SPIR-V version of this module.
+  void setVersion(uint32_t ver) { version_ = ver; }
+
+  /// Gets the SPIR-V version of this module.
+  uint32_t version() const { return version_; }
 
   /// Forward declares the id in the module
   spv_result_t ForwardDeclareId(uint32_t id);
@@ -141,8 +149,16 @@ class ValidationState_t {
   /// Returns true if the id has been defined
   bool IsDefinedId(uint32_t id) const;
 
-  /// Increments the instruction count. Used for diagnostic
-  int increment_instruction_count();
+  /// Increments the total number of instructions in the file.
+  void increment_total_instructions() { total_instructions_++; }
+
+  /// Increments the total number of functions in the file.
+  void increment_total_functions() { total_functions_++; }
+
+  /// Allocates internal storage. Note, calling this will invalidate any
+  /// pointers to |ordered_instructions_| or |module_functions_| and, hence,
+  /// should only be called at the beginning of validation.
+  void preallocateStorage();
 
   /// Returns the current layout section which is being processed
   ModuleLayoutSection current_layout_section() const;
@@ -153,11 +169,10 @@ class ValidationState_t {
   /// Determines if the op instruction is part of the current section
   bool IsOpcodeInCurrentLayoutSection(SpvOp op);
 
-  DiagnosticStream diag(spv_result_t error_code) const;
-  DiagnosticStream diag(spv_result_t error_code, int instruction_counter) const;
+  DiagnosticStream diag(spv_result_t error_code, const Instruction* inst) const;
 
   /// Returns the function states
-  std::deque<Function>& functions();
+  std::vector<Function>& functions();
 
   /// Returns the function states
   Function& current_function();
@@ -165,6 +180,7 @@ class ValidationState_t {
 
   /// Returns function state with the given id, or nullptr if no such function.
   const Function* function(uint32_t id) const;
+  Function* function(uint32_t id);
 
   /// Returns true if the called after a function instruction but before the
   /// function end instruction
@@ -296,8 +312,15 @@ class ValidationState_t {
 
   const AssemblyGrammar& grammar() const { return grammar_; }
 
-  /// Registers the instruction
-  void RegisterInstruction(const spv_parsed_instruction_t& inst);
+  /// Inserts the instruction into the list of ordered instructions in the file.
+  Instruction* AddOrderedInstruction(const spv_parsed_instruction_t* inst);
+
+  /// Registers the instruction. This will add the instruction to the list of
+  /// definitions and register sampled image consumers.
+  void RegisterInstruction(Instruction* inst);
+
+  /// Registers the debug instruction information.
+  void RegisterDebugInstruction(const Instruction* inst);
 
   /// Registers the decoration for the given <id>
   void RegisterDecorationForId(uint32_t id, const Decoration& dec) {
@@ -348,8 +371,8 @@ class ValidationState_t {
   /// nullptr
   Instruction* FindDef(uint32_t id);
 
-  /// Returns a deque of instructions in the order they appear in the binary
-  const std::deque<Instruction>& ordered_instructions() const {
+  /// Returns the instructions in the order they appear in the binary
+  const std::vector<Instruction>& ordered_instructions() const {
     return ordered_instructions_;
   }
 
@@ -510,8 +533,16 @@ class ValidationState_t {
   const uint32_t* words_;
   const size_t num_words_;
 
-  /// Tracks the number of instructions evaluated by the validator
-  int instruction_counter_;
+  /// The generator of the SPIR-V.
+  uint32_t generator_ = 0;
+
+  /// The version of the SPIR-V.
+  uint32_t version_ = 0;
+
+  /// The total number of instructions in the binary.
+  size_t total_instructions_ = 0;
+  /// The total number of functions in the binary.
+  size_t total_functions_ = 0;
 
   /// IDs which have been forward declared but have not been defined
   std::unordered_set<uint32_t> unresolved_forward_ids_;
@@ -532,7 +563,7 @@ class ValidationState_t {
   /// A list of functions in the module.
   /// Pointers to objects in this container are guaranteed to be stable and
   /// valid until the end of lifetime of the validation state.
-  std::deque<Function> module_functions_;
+  std::vector<Function> module_functions_;
 
   /// Capabilities declared in the module
   CapabilitySet module_capabilities_;
@@ -541,9 +572,7 @@ class ValidationState_t {
   ExtensionSet module_extensions_;
 
   /// List of all instructions in the order they appear in the binary
-  /// Pointers to objects in this container are guaranteed to be stable and
-  /// valid until the end of lifetime of the validation state.
-  std::deque<Instruction> ordered_instructions_;
+  std::vector<Instruction> ordered_instructions_;
 
   /// Instructions that can be referenced by Ids
   std::unordered_map<uint32_t, Instruction*> all_definitions_;
@@ -616,4 +645,4 @@ class ValidationState_t {
 }  // namespace val
 }  // namespace spvtools
 
-#endif  /// LIBSPIRV_VAL_VALIDATIONSTATE_H_
+#endif  // SOURCE_VAL_VALIDATION_STATE_H_

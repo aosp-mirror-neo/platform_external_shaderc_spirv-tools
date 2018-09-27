@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "folding_rules.h"
+#include "source/opt/folding_rules.h"
 
 #include <limits>
+#include <memory>
+#include <utility>
 
-#include "ir_context.h"
-#include "latest_version_glsl_std_450_header.h"
+#include "source/latest_version_glsl_std_450_header.h"
+#include "source/opt/ir_context.h"
 
 namespace spvtools {
 namespace opt {
@@ -1502,6 +1504,14 @@ FoldingRule VectorShuffleFeedingExtract() {
     uint32_t new_index =
         cinst->GetSingleWordInOperand(2 + inst->GetSingleWordInOperand(1));
 
+    // Extracting an undefined value so fold this extract into an undef.
+    const uint32_t undef_literal_value = 0xffffffff;
+    if (new_index == undef_literal_value) {
+      inst->SetOpcode(SpvOpUndef);
+      inst->SetInOperands({});
+      return true;
+    }
+
     // Get the id of the of the vector the elemtent comes from, and update the
     // index if needed.
     uint32_t new_vector = 0;
@@ -1899,6 +1909,37 @@ FoldingRule RedundantFMix() {
   };
 }
 
+// This rule handles addition of zero for integers.
+FoldingRule RedundantIAdd() {
+  return [](IRContext* context, Instruction* inst,
+            const std::vector<const analysis::Constant*>& constants) {
+    assert(inst->opcode() == SpvOpIAdd && "Wrong opcode. Should be OpIAdd.");
+
+    uint32_t operand = std::numeric_limits<uint32_t>::max();
+    const analysis::Type* operand_type = nullptr;
+    if (constants[0] && constants[0]->IsZero()) {
+      operand = inst->GetSingleWordInOperand(1);
+      operand_type = constants[0]->type();
+    } else if (constants[1] && constants[1]->IsZero()) {
+      operand = inst->GetSingleWordInOperand(0);
+      operand_type = constants[1]->type();
+    }
+
+    if (operand != std::numeric_limits<uint32_t>::max()) {
+      const analysis::Type* inst_type =
+          context->get_type_mgr()->GetType(inst->type_id());
+      if (inst_type->IsSame(operand_type)) {
+        inst->SetOpcode(SpvOpCopyObject);
+      } else {
+        inst->SetOpcode(SpvOpBitcast);
+      }
+      inst->SetInOperands({{SPV_OPERAND_TYPE_ID, {operand}}});
+      return true;
+    }
+    return false;
+  };
+}
+
 // This rule look for a dot with a constant vector containing a single 1 and
 // the rest 0s.  This is the same as doing an extract.
 FoldingRule DotProductDoingExtract() {
@@ -2035,10 +2076,13 @@ FoldingRule VectorShuffleFeedingShuffle() {
     std::vector<Operand> new_operands;
     new_operands.resize(
         2, {SPV_OPERAND_TYPE_ID, {0}});  // Place holders for vector operands.
+    const uint32_t undef_literal = 0xffffffff;
     for (uint32_t op = 2; op < inst->NumInOperands(); ++op) {
       uint32_t component_index = inst->GetSingleWordInOperand(op);
 
-      if (feeder_is_op0 == (component_index < op0_length)) {
+      // Do not interpret the undefined value literal as coming from operand 1.
+      if (component_index != undef_literal &&
+          feeder_is_op0 == (component_index < op0_length)) {
         // This component comes from the feeding_shuffle_inst.  Update
         // |component_index| to be the index into the operand of the feeder.
 
@@ -2166,6 +2210,7 @@ FoldingRules::FoldingRules() {
   rules_[SpvOpFSub].push_back(MergeSubAddArithmetic());
   rules_[SpvOpFSub].push_back(MergeSubSubArithmetic());
 
+  rules_[SpvOpIAdd].push_back(RedundantIAdd());
   rules_[SpvOpIAdd].push_back(MergeAddNegateArithmetic());
   rules_[SpvOpIAdd].push_back(MergeAddAddArithmetic());
   rules_[SpvOpIAdd].push_back(MergeAddSubArithmetic());

@@ -23,6 +23,7 @@
 #include "source/spirv_target_env.h"
 #include "source/util/bitutils.h"
 #include "source/val/instruction.h"
+#include "source/val/validate_scopes.h"
 #include "source/val/validation_state.h"
 
 namespace spvtools {
@@ -496,6 +497,48 @@ spv_result_t ValidateImageOperands(ValidationState_t& _,
       return _.diag(SPV_ERROR_INVALID_DATA, inst)
              << "Image Operand MinLod requires 'MS' parameter to be 0";
     }
+  }
+
+  if (mask & SpvImageOperandsMakeTexelAvailableKHRMask) {
+    // Checked elsewhere: capability and memory model are correct.
+    if (opcode != SpvOpImageWrite) {
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
+             << "Image Operand MakeTexelAvailableKHR can only be used with Op"
+             << spvOpcodeString(SpvOpImageWrite) << ": Op"
+             << spvOpcodeString(opcode);
+    }
+
+    if (!(mask & SpvImageOperandsNonPrivateTexelKHRMask)) {
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
+             << "Image Operand MakeTexelAvailableKHR requires "
+                "NonPrivateTexelKHR is also specified: Op"
+             << spvOpcodeString(opcode);
+    }
+
+    const auto available_scope = inst->word(word_index++);
+    if (auto error = ValidateMemoryScope(_, inst, available_scope))
+      return error;
+  }
+
+  if (mask & SpvImageOperandsMakeTexelVisibleKHRMask) {
+    // Checked elsewhere: capability and memory model are correct.
+    if (opcode != SpvOpImageRead && opcode != SpvOpImageSparseRead) {
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
+             << "Image Operand MakeTexelVisibleKHR can only be used with Op"
+             << spvOpcodeString(SpvOpImageRead) << " or Op"
+             << spvOpcodeString(SpvOpImageSparseRead) << ": Op"
+             << spvOpcodeString(opcode);
+    }
+
+    if (!(mask & SpvImageOperandsNonPrivateTexelKHRMask)) {
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
+             << "Image Operand MakeTexelVisibleKHR requires NonPrivateTexelKHR "
+                "is also specified: Op"
+             << spvOpcodeString(opcode);
+    }
+
+    const auto visible_scope = inst->word(word_index++);
+    if (auto error = ValidateMemoryScope(_, inst, visible_scope)) return error;
   }
 
   return SPV_SUCCESS;
@@ -1474,57 +1517,45 @@ spv_result_t ValidateImageQuerySize(ValidationState_t& _,
            << "Expected Image to be of type OpTypeImage";
   }
 
-#if 0
-  // TODO(atgoo@github.com) The spec doesn't whitelist all Dims supported by
-  // GLSL. Need to verify if there is an error and reenable.
   ImageTypeInfo info;
   if (!GetImageTypeInfo(_, image_type, &info)) {
     return _.diag(SPV_ERROR_INVALID_DATA, inst)
-        << "Corrupt image type definition";
+           << "Corrupt image type definition";
   }
 
   uint32_t expected_num_components = info.arrayed;
   switch (info.dim) {
+    case SpvDim1D:
     case SpvDimBuffer:
       expected_num_components += 1;
       break;
     case SpvDim2D:
-      if (info.multisampled != 1 && info.sampled != 0 &&
-          info.sampled != 2) {
-        return _.diag(SPV_ERROR_INVALID_DATA, inst)
-            << "Expected either 'MS'=1 or 'Sampled'=0 or 'Sampled'=2 "
-            << "for 2D dim";
-      }
+    case SpvDimCube:
     case SpvDimRect:
       expected_num_components += 2;
       break;
     case SpvDim3D:
       expected_num_components += 3;
-      if (info.sampled != 0 &&
-          info.sampled != 2) {
-        return _.diag(SPV_ERROR_INVALID_DATA, inst)
-            << "Expected either 'Sampled'=0 or 'Sampled'=2 "
-            << "for 3D dim";
-      }
       break;
     default:
       return _.diag(SPV_ERROR_INVALID_DATA, inst)
-          << "Image 'Dim' must be Buffer, 2D, 3D or Rect";
+             << "Image 'Dim' must be 1D, Buffer, 2D, Cube, 3D or Rect";
   }
 
-
-  if (info.multisampled != 0) {
-    return _.diag(SPV_ERROR_INVALID_DATA, inst)
-        << "Image 'MS' must be 0";
+  if (info.dim == SpvDim1D || info.dim == SpvDim2D || info.dim == SpvDim3D ||
+      info.dim == SpvDimCube) {
+    if (info.multisampled != 1 && info.sampled != 0 && info.sampled != 2) {
+      return _.diag(SPV_ERROR_INVALID_DATA, inst)
+             << "Image must have either 'MS'=1 or 'Sampled'=0 or 'Sampled'=2";
+    }
   }
 
   uint32_t result_num_components = _.GetDimension(result_type);
   if (result_num_components != expected_num_components) {
     return _.diag(SPV_ERROR_INVALID_DATA, inst)
-        << "Result Type has " << result_num_components << " components, "
-        << "but " << expected_num_components << " expected";
+           << "Result Type has " << result_num_components << " components, "
+           << "but " << expected_num_components << " expected";
   }
-#endif
 
   return SPV_SUCCESS;
 }

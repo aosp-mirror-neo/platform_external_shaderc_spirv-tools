@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <source/spirv_optimizer_options.h>
+#include "code_sink.h"
 #include "source/opt/build_module.h"
 #include "source/opt/log.h"
 #include "source/opt/pass_manager.h"
@@ -56,8 +57,8 @@ Optimizer::PassToken::~PassToken() {}
 struct Optimizer::Impl {
   explicit Impl(spv_target_env env) : target_env(env), pass_manager() {}
 
-  const spv_target_env target_env;  // Target environment.
-  opt::PassManager pass_manager;    // Internal implementation pass manager.
+  spv_target_env target_env;      // Target environment.
+  opt::PassManager pass_manager;  // Internal implementation pass manager.
 };
 
 Optimizer::Optimizer(spv_target_env env) : impl_(new Impl(env)) {}
@@ -149,7 +150,8 @@ Optimizer& Optimizer::RegisterLegalizationPasses() {
 }
 
 Optimizer& Optimizer::RegisterPerformancePasses() {
-  return RegisterPass(CreateMergeReturnPass())
+  return RegisterPass(CreateDeadBranchElimPass())
+      .RegisterPass(CreateMergeReturnPass())
       .RegisterPass(CreateInlineExhaustivePass())
       .RegisterPass(CreateAggressiveDCEPass())
       .RegisterPass(CreatePrivateToLocalPass())
@@ -186,7 +188,8 @@ Optimizer& Optimizer::RegisterPerformancePasses() {
 }
 
 Optimizer& Optimizer::RegisterSizePasses() {
-  return RegisterPass(CreateMergeReturnPass())
+  return RegisterPass(CreateDeadBranchElimPass())
+      .RegisterPass(CreateMergeReturnPass())
       .RegisterPass(CreateInlineExhaustivePass())
       .RegisterPass(CreateAggressiveDCEPass())
       .RegisterPass(CreatePrivateToLocalPass())
@@ -212,6 +215,13 @@ Optimizer& Optimizer::RegisterSizePasses() {
       // Currently exposing driver bugs resulting in crashes (#946)
       // .RegisterPass(CreateCommonUniformElimPass())
       .RegisterPass(CreateAggressiveDCEPass());
+}
+
+Optimizer& Optimizer::RegisterWebGPUPasses() {
+  return RegisterPass(CreateStripDebugInfoPass())
+      .RegisterPass(CreateFlattenDecorationPass())
+      .RegisterPass(CreateAggressiveDCEPass())
+      .RegisterPass(CreateDeadBranchElimPass());
 }
 
 bool Optimizer::RegisterPassesFromFlags(const std::vector<std::string>& flags) {
@@ -294,6 +304,10 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateLocalAccessChainConvertPass());
   } else if (pass_name == "eliminate-dead-code-aggressive") {
     RegisterPass(CreateAggressiveDCEPass());
+  } else if (pass_name == "propagate-line-info") {
+    RegisterPass(CreatePropagateLineInfoPass());
+  } else if (pass_name == "eliminate-redundant-line-info") {
+    RegisterPass(CreateRedundantLineInfoElimPass());
   } else if (pass_name == "eliminate-insert-extract") {
     RegisterPass(CreateInsertExtractElimPass());
   } else if (pass_name == "eliminate-local-single-block") {
@@ -318,6 +332,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateDeadInsertElimPass());
   } else if (pass_name == "eliminate-dead-variables") {
     RegisterPass(CreateDeadVariableEliminationPass());
+  } else if (pass_name == "eliminate-dead-members") {
+    RegisterPass(CreateEliminateDeadMembersPass());
   } else if (pass_name == "fold-spec-const-op-composite") {
     RegisterPass(CreateFoldSpecConstantOpAndCompositePass());
   } else if (pass_name == "loop-unswitch") {
@@ -366,6 +382,12 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateWorkaround1209Pass());
   } else if (pass_name == "replace-invalid-opcode") {
     RegisterPass(CreateReplaceInvalidOpcodePass());
+  } else if (pass_name == "inst-bindless-check") {
+    RegisterPass(CreateInstBindlessCheckPass(7, 23, true));
+    RegisterPass(CreateSimplificationPass());
+    RegisterPass(CreateDeadBranchElimPass());
+    RegisterPass(CreateBlockMergePass());
+    RegisterPass(CreateAggressiveDCEPass());
   } else if (pass_name == "simplify-instructions") {
     RegisterPass(CreateSimplificationPass());
   } else if (pass_name == "ssa-rewrite") {
@@ -396,6 +418,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     }
   } else if (pass_name == "loop-unroll") {
     RegisterPass(CreateLoopUnrollPass(true));
+  } else if (pass_name == "upgrade-memory-model") {
+    RegisterPass(CreateUpgradeMemoryModelPass());
   } else if (pass_name == "vector-dce") {
     RegisterPass(CreateVectorDCEPass());
   } else if (pass_name == "loop-unroll-partial") {
@@ -420,6 +444,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     }
   } else if (pass_name == "ccp") {
     RegisterPass(CreateCCPPass());
+  } else if (pass_name == "code-sink") {
+    RegisterPass(CreateCodeSinkingPass());
   } else if (pass_name == "O") {
     RegisterPerformancePasses();
   } else if (pass_name == "Os") {
@@ -434,6 +460,10 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
   }
 
   return true;
+}
+
+void Optimizer::SetTargetEnv(const spv_target_env env) {
+  impl_->target_env = env;
 }
 
 bool Optimizer::Run(const uint32_t* original_binary,
@@ -512,6 +542,11 @@ Optimizer::PassToken CreateStripReflectInfoPass() {
 Optimizer::PassToken CreateEliminateDeadFunctionsPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::EliminateDeadFunctionsPass>());
+}
+
+Optimizer::PassToken CreateEliminateDeadMembersPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::EliminateDeadMembersPass>());
 }
 
 Optimizer::PassToken CreateSetSpecConstantDefaultValuePass(
@@ -614,6 +649,16 @@ Optimizer::PassToken CreateLocalMultiStoreElimPass() {
 Optimizer::PassToken CreateAggressiveDCEPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::AggressiveDCEPass>());
+}
+
+Optimizer::PassToken CreatePropagateLineInfoPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::ProcessLinesPass>(opt::kLinesPropagateLines));
+}
+
+Optimizer::PassToken CreateRedundantLineInfoElimPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::ProcessLinesPass>(opt::kLinesEliminateDeadLines));
 }
 
 Optimizer::PassToken CreateCommonUniformElimPass() {
@@ -745,4 +790,23 @@ Optimizer::PassToken CreateCombineAccessChainsPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::CombineAccessChains>());
 }
+
+Optimizer::PassToken CreateUpgradeMemoryModelPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::UpgradeMemoryModel>());
+}
+
+Optimizer::PassToken CreateInstBindlessCheckPass(uint32_t desc_set,
+                                                 uint32_t shader_id,
+                                                 bool runtime_array_enable) {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::InstBindlessCheckPass>(desc_set, shader_id,
+                                             runtime_array_enable));
+}
+
+Optimizer::PassToken CreateCodeSinkingPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::CodeSinkingPass>());
+}
+
 }  // namespace spvtools

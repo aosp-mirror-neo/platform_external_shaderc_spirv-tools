@@ -60,12 +60,22 @@ spv_result_t GetUnderlyingType(ValidationState_t& _,
                                const Instruction& inst,
                                uint32_t* underlying_type) {
   if (decoration.struct_member_index() != Decoration::kInvalidMember) {
-    assert(inst.opcode() == SpvOpTypeStruct);
+    if (inst.opcode() != SpvOpTypeStruct) {
+      return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+             << GetIdDesc(inst)
+             << "Attempted to get underlying data type via member index for "
+                "non-struct type.";
+    }
     *underlying_type = inst.word(decoration.struct_member_index() + 2);
     return SPV_SUCCESS;
   }
 
-  assert(inst.opcode() != SpvOpTypeStruct);
+  if (inst.opcode() == SpvOpTypeStruct) {
+    return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+           << GetIdDesc(inst)
+           << " did not find an member index to get underlying data type for "
+              "struct type.";
+  }
 
   if (spvOpcodeIsConstant(inst.opcode())) {
     *underlying_type = inst.type_id();
@@ -353,6 +363,13 @@ class BuiltInsValidator {
   spv_result_t ValidateI32Arr(
       const Decoration& decoration, const Instruction& inst,
       const std::function<spv_result_t(const std::string& message)>& diag);
+  spv_result_t ValidateOptionalArrayedI32(
+      const Decoration& decoration, const Instruction& inst,
+      const std::function<spv_result_t(const std::string& message)>& diag);
+  spv_result_t ValidateI32Helper(
+      const Decoration& decoration, const Instruction& inst,
+      const std::function<spv_result_t(const std::string& message)>& diag,
+      uint32_t underlying_type);
   spv_result_t ValidateF32(
       const Decoration& decoration, const Instruction& inst,
       const std::function<spv_result_t(const std::string& message)>& diag);
@@ -533,6 +550,30 @@ spv_result_t BuiltInsValidator::ValidateI32(
     return error;
   }
 
+  return ValidateI32Helper(decoration, inst, diag, underlying_type);
+}
+
+spv_result_t BuiltInsValidator::ValidateOptionalArrayedI32(
+    const Decoration& decoration, const Instruction& inst,
+    const std::function<spv_result_t(const std::string& message)>& diag) {
+  uint32_t underlying_type = 0;
+  if (spv_result_t error =
+          GetUnderlyingType(_, decoration, inst, &underlying_type)) {
+    return error;
+  }
+
+  // Strip the array, if present.
+  if (_.GetIdOpcode(underlying_type) == SpvOpTypeArray) {
+    underlying_type = _.FindDef(underlying_type)->word(2u);
+  }
+
+  return ValidateI32Helper(decoration, inst, diag, underlying_type);
+}
+
+spv_result_t BuiltInsValidator::ValidateI32Helper(
+    const Decoration& decoration, const Instruction& inst,
+    const std::function<spv_result_t(const std::string& message)>& diag,
+    uint32_t underlying_type) {
   if (!_.IsIntScalarType(underlying_type)) {
     return diag(GetDefinitionDesc(decoration, inst) + " is not an int scalar.");
   }
@@ -1716,15 +1757,31 @@ spv_result_t BuiltInsValidator::ValidatePositionAtReference(
 spv_result_t BuiltInsValidator::ValidatePrimitiveIdAtDefinition(
     const Decoration& decoration, const Instruction& inst) {
   if (spvIsVulkanEnv(_.context()->target_env)) {
-    if (spv_result_t error = ValidateI32(
-            decoration, inst,
-            [this, &inst](const std::string& message) -> spv_result_t {
-              return _.diag(SPV_ERROR_INVALID_DATA, &inst)
-                     << "According to the Vulkan spec BuiltIn PrimitiveId "
-                        "variable needs to be a 32-bit int scalar. "
-                     << message;
-            })) {
-      return error;
+    // PrimitiveId can be a per-primitive variable for mesh shader stage.
+    // In such cases variable will have an array of 32-bit integers.
+    if (decoration.struct_member_index() != Decoration::kInvalidMember) {
+      // This must be a 32-bit int scalar.
+      if (spv_result_t error = ValidateI32(
+              decoration, inst,
+              [this, &inst](const std::string& message) -> spv_result_t {
+                return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+                       << "According to the Vulkan spec BuiltIn PrimitiveId "
+                          "variable needs to be a 32-bit int scalar. "
+                       << message;
+              })) {
+        return error;
+      }
+    } else {
+      if (spv_result_t error = ValidateOptionalArrayedI32(
+              decoration, inst,
+              [this, &inst](const std::string& message) -> spv_result_t {
+                return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+                       << "According to the Vulkan spec BuiltIn PrimitiveId "
+                          "variable needs to be a 32-bit int scalar. "
+                       << message;
+              })) {
+        return error;
+      }
     }
   }
 
@@ -2331,17 +2388,37 @@ spv_result_t BuiltInsValidator::ValidateVertexIndexAtReference(
 spv_result_t BuiltInsValidator::ValidateLayerOrViewportIndexAtDefinition(
     const Decoration& decoration, const Instruction& inst) {
   if (spvIsVulkanEnv(_.context()->target_env)) {
-    if (spv_result_t error = ValidateI32(
-            decoration, inst,
-            [this, &decoration,
-             &inst](const std::string& message) -> spv_result_t {
-              return _.diag(SPV_ERROR_INVALID_DATA, &inst)
-                     << "According to the Vulkan spec BuiltIn "
-                     << _.grammar().lookupOperandName(SPV_OPERAND_TYPE_BUILT_IN,
-                                                      decoration.params()[0])
-                     << "variable needs to be a 32-bit int scalar. " << message;
-            })) {
-      return error;
+    // This can be a per-primitive variable for mesh shader stage.
+    // In such cases variable will have an array of 32-bit integers.
+    if (decoration.struct_member_index() != Decoration::kInvalidMember) {
+      // This must be a 32-bit int scalar.
+      if (spv_result_t error = ValidateI32(
+              decoration, inst,
+              [this, &decoration,
+               &inst](const std::string& message) -> spv_result_t {
+                return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+                       << "According to the Vulkan spec BuiltIn "
+                       << _.grammar().lookupOperandName(
+                              SPV_OPERAND_TYPE_BUILT_IN, decoration.params()[0])
+                       << "variable needs to be a 32-bit int scalar. "
+                       << message;
+              })) {
+        return error;
+      }
+    } else {
+      if (spv_result_t error = ValidateOptionalArrayedI32(
+              decoration, inst,
+              [this, &decoration,
+               &inst](const std::string& message) -> spv_result_t {
+                return _.diag(SPV_ERROR_INVALID_DATA, &inst)
+                       << "According to the Vulkan spec BuiltIn "
+                       << _.grammar().lookupOperandName(
+                              SPV_OPERAND_TYPE_BUILT_IN, decoration.params()[0])
+                       << "variable needs to be a 32-bit int scalar. "
+                       << message;
+              })) {
+        return error;
+      }
     }
   }
 
@@ -2733,7 +2810,11 @@ spv_result_t BuiltInsValidator::ValidateSingleBuiltInAtDefinition(
     case SpvBuiltInWorldToObjectNV:
     case SpvBuiltInHitTNV:
     case SpvBuiltInHitKindNV:
-    case SpvBuiltInIncomingRayFlagsNV: {
+    case SpvBuiltInIncomingRayFlagsNV:
+    case SpvBuiltInWarpsPerSMNV:
+    case SpvBuiltInSMCountNV:
+    case SpvBuiltInWarpIDNV:
+    case SpvBuiltInSMIDNV: {
       // No validation rules (for the moment).
       break;
     }

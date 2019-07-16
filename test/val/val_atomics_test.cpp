@@ -397,7 +397,7 @@ TEST_F(ValidateAtomics, AtomicLoadWebGPUNonRelaxedFailure) {
 
 TEST_F(ValidateAtomics, AtomicLoadWebGPUSequentiallyConsistentFailure) {
   const std::string body = R"(
-%val3 = OpAtomicLoad %u32 %u32_var %subgroup %sequentially_consistent
+%val3 = OpAtomicLoad %u32 %u32_var %invocation %sequentially_consistent
 )";
 
   CompileSuccessfully(GenerateWebGPUShaderCode(body), SPV_ENV_WEBGPU_0);
@@ -1916,7 +1916,7 @@ TEST_F(ValidateAtomics, WebGPUCrossDeviceMemoryScopeBad) {
   EXPECT_THAT(
       getDiagnosticString(),
       HasSubstr("AtomicLoad: in WebGPU environment Memory Scope is limited to "
-                "Workgroup, Subgroup and QueuFamilyKHR\n"
+                "Workgroup, Invocation, and QueueFamilyKHR\n"
                 "  %34 = OpAtomicLoad %uint %29 %uint_0_0 %uint_0_1\n"));
 }
 
@@ -1930,7 +1930,7 @@ TEST_F(ValidateAtomics, WebGPUDeviceMemoryScopeBad) {
   EXPECT_THAT(
       getDiagnosticString(),
       HasSubstr("AtomicLoad: in WebGPU environment Memory Scope is limited to "
-                "Workgroup, Subgroup and QueuFamilyKHR\n"
+                "Workgroup, Invocation, and QueueFamilyKHR\n"
                 "  %34 = OpAtomicLoad %uint %29 %uint_1_0 %uint_0_1\n"));
 }
 
@@ -1943,18 +1943,9 @@ TEST_F(ValidateAtomics, WebGPUWorkgroupMemoryScopeGood) {
   EXPECT_EQ(SPV_SUCCESS, ValidateInstructions(SPV_ENV_WEBGPU_0));
 }
 
-TEST_F(ValidateAtomics, WebGPUSubgroupMemoryScopeGood) {
+TEST_F(ValidateAtomics, WebGPUSubgroupMemoryScopeBad) {
   const std::string body = R"(
 %val1 = OpAtomicLoad %u32 %u32_var %subgroup %relaxed
-)";
-
-  CompileSuccessfully(GenerateWebGPUShaderCode(body), SPV_ENV_WEBGPU_0);
-  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions(SPV_ENV_WEBGPU_0));
-}
-
-TEST_F(ValidateAtomics, WebGPUInvocationMemoryScopeBad) {
-  const std::string body = R"(
-%val1 = OpAtomicLoad %u32 %u32_var %invocation %relaxed
 )";
 
   CompileSuccessfully(GenerateWebGPUShaderCode(body), SPV_ENV_WEBGPU_0);
@@ -1962,8 +1953,17 @@ TEST_F(ValidateAtomics, WebGPUInvocationMemoryScopeBad) {
   EXPECT_THAT(
       getDiagnosticString(),
       HasSubstr("AtomicLoad: in WebGPU environment Memory Scope is limited to "
-                "Workgroup, Subgroup and QueuFamilyKHR\n"
-                "  %34 = OpAtomicLoad %uint %29 %uint_4 %uint_0_1\n"));
+                "Workgroup, Invocation, and QueueFamilyKHR\n"
+                "  %34 = OpAtomicLoad %uint %29 %uint_3 %uint_0_1\n"));
+}
+
+TEST_F(ValidateAtomics, WebGPUInvocationMemoryScopeGood) {
+  const std::string body = R"(
+%val1 = OpAtomicLoad %u32 %u32_var %invocation %relaxed
+)";
+
+  CompileSuccessfully(GenerateWebGPUShaderCode(body), SPV_ENV_WEBGPU_0);
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions(SPV_ENV_WEBGPU_0));
 }
 
 TEST_F(ValidateAtomics, WebGPUQueueFamilyMemoryScopeGood) {
@@ -1996,6 +1996,153 @@ TEST_F(ValidateAtomics, CompareExchangeWeakV14Bad) {
       getDiagnosticString(),
       HasSubstr(
           "AtomicCompareExchangeWeak requires SPIR-V version 1.3 or earlier"));
+}
+
+TEST_F(ValidateAtomics, CompareExchangeVolatileMatch) {
+  const std::string spirv = R"(
+OpCapability Shader
+OpCapability VulkanMemoryModelKHR
+OpCapability Linkage
+OpExtension "SPV_KHR_vulkan_memory_model"
+OpMemoryModel Logical VulkanKHR
+%void = OpTypeVoid
+%int = OpTypeInt 32 0
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%workgroup = OpConstant %int 2
+%volatile = OpConstant %int 32768
+%ptr_wg_int = OpTypePointer Workgroup %int
+%wg_var = OpVariable %ptr_wg_int Workgroup
+%void_fn = OpTypeFunction %void
+%func = OpFunction %void None %void_fn
+%entry = OpLabel
+%cmp_ex = OpAtomicCompareExchange %int %wg_var %workgroup %volatile %volatile %int_0 %int_1
+OpReturn
+OpFunctionEnd
+)";
+
+  CompileSuccessfully(spirv);
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions());
+}
+
+TEST_F(ValidateAtomics, CompareExchangeVolatileMismatch) {
+  const std::string spirv = R"(
+OpCapability Shader
+OpCapability VulkanMemoryModelKHR
+OpCapability Linkage
+OpExtension "SPV_KHR_vulkan_memory_model"
+OpMemoryModel Logical VulkanKHR
+%void = OpTypeVoid
+%int = OpTypeInt 32 0
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%workgroup = OpConstant %int 2
+%volatile = OpConstant %int 32768
+%non_volatile = OpConstant %int 0
+%ptr_wg_int = OpTypePointer Workgroup %int
+%wg_var = OpVariable %ptr_wg_int Workgroup
+%void_fn = OpTypeFunction %void
+%func = OpFunction %void None %void_fn
+%entry = OpLabel
+%cmp_ex = OpAtomicCompareExchange %int %wg_var %workgroup %non_volatile %volatile %int_0 %int_1
+OpReturn
+OpFunctionEnd
+)";
+
+  CompileSuccessfully(spirv);
+  EXPECT_EQ(SPV_ERROR_INVALID_ID, ValidateInstructions());
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Volatile mask setting must match for Equal and "
+                        "Unequal memory semantics"));
+}
+
+TEST_F(ValidateAtomics, CompareExchangeVolatileMismatchCooperativeMatrix) {
+  const std::string spirv = R"(
+OpCapability Shader
+OpCapability VulkanMemoryModelKHR
+OpCapability Linkage
+OpCapability CooperativeMatrixNV
+OpExtension "SPV_KHR_vulkan_memory_model"
+OpExtension "SPV_NV_cooperative_matrix"
+OpMemoryModel Logical VulkanKHR
+%void = OpTypeVoid
+%int = OpTypeInt 32 0
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%workgroup = OpConstant %int 2
+%volatile = OpSpecConstant %int 32768
+%non_volatile = OpSpecConstant %int 32768
+%ptr_wg_int = OpTypePointer Workgroup %int
+%wg_var = OpVariable %ptr_wg_int Workgroup
+%void_fn = OpTypeFunction %void
+%func = OpFunction %void None %void_fn
+%entry = OpLabel
+%cmp_ex = OpAtomicCompareExchange %int %wg_var %workgroup %volatile %non_volatile %int_0 %int_1
+OpReturn
+OpFunctionEnd
+)";
+
+  // This is ok because we cannot evaluate the spec constant defaults.
+  CompileSuccessfully(spirv);
+  EXPECT_EQ(SPV_SUCCESS, ValidateInstructions());
+}
+
+TEST_F(ValidateAtomics, VolatileRequiresVulkanMemoryModel) {
+  const std::string spirv = R"(
+OpCapability Shader
+OpCapability Linkage
+OpMemoryModel Logical GLSL450
+%void = OpTypeVoid
+%int = OpTypeInt 32 0
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%workgroup = OpConstant %int 2
+%volatile = OpConstant %int 32768
+%ptr_wg_int = OpTypePointer Workgroup %int
+%wg_var = OpVariable %ptr_wg_int Workgroup
+%void_fn = OpTypeFunction %void
+%func = OpFunction %void None %void_fn
+%entry = OpLabel
+%ld = OpAtomicLoad %int %wg_var %workgroup %volatile
+OpReturn
+OpFunctionEnd
+)";
+
+  CompileSuccessfully(spirv);
+  EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Memory Semantics Volatile requires capability "
+                        "VulkanMemoryModelKHR"));
+}
+
+TEST_F(ValidateAtomics, CooperativeMatrixSemanticsMustBeConstant) {
+  const std::string spirv = R"(
+OpCapability Shader
+OpCapability Linkage
+OpCapability CooperativeMatrixNV
+OpExtension "SPV_NV_cooperative_matrix"
+OpMemoryModel Logical GLSL450
+%void = OpTypeVoid
+%int = OpTypeInt 32 0
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%workgroup = OpConstant %int 2
+%undef = OpUndef %int
+%ptr_wg_int = OpTypePointer Workgroup %int
+%wg_var = OpVariable %ptr_wg_int Workgroup
+%void_fn = OpTypeFunction %void
+%func = OpFunction %void None %void_fn
+%entry = OpLabel
+%ld = OpAtomicLoad %int %wg_var %workgroup %undef
+OpReturn
+OpFunctionEnd
+)";
+
+  CompileSuccessfully(spirv);
+  EXPECT_EQ(SPV_ERROR_INVALID_DATA, ValidateInstructions());
+  EXPECT_THAT(getDiagnosticString(),
+              HasSubstr("Memory Semantics must be a constant instruction when "
+                        "CooperativeMatrixNV capability is present"));
 }
 
 }  // namespace

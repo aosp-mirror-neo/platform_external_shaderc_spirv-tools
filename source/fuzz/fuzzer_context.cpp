@@ -26,8 +26,10 @@ namespace {
 
 const uint32_t kDefaultChanceOfAddingDeadBreak = 20;
 const uint32_t kDefaultChanceOfAddingDeadContinue = 20;
+const uint32_t kDefaultChanceOfCopyingObject = 20;
 const uint32_t kDefaultChanceOfMovingBlockDown = 25;
 const uint32_t kDefaultChanceOfObfuscatingConstant = 20;
+const uint32_t kDefaultChanceOfReplacingIdWithSynonym = 20;
 const uint32_t kDefaultChanceOfSplittingBlock = 20;
 
 // Default functions for controlling how deep to go during recursive
@@ -48,8 +50,11 @@ FuzzerContext::FuzzerContext(RandomGenerator* random_generator,
       next_fresh_id_(min_fresh_id),
       chance_of_adding_dead_break_(kDefaultChanceOfAddingDeadBreak),
       chance_of_adding_dead_continue_(kDefaultChanceOfAddingDeadContinue),
+      chance_of_copying_object_(kDefaultChanceOfCopyingObject),
       chance_of_moving_block_down_(kDefaultChanceOfMovingBlockDown),
       chance_of_obfuscating_constant_(kDefaultChanceOfObfuscatingConstant),
+      chance_of_replacing_id_with_synonym_(
+          kDefaultChanceOfReplacingIdWithSynonym),
       chance_of_splitting_block_(kDefaultChanceOfSplittingBlock),
       go_deeper_in_constant_obfuscation_(
           kDefaultGoDeeperInConstantObfuscation) {}
@@ -58,8 +63,11 @@ FuzzerContext::~FuzzerContext() = default;
 
 uint32_t FuzzerContext::GetFreshId() { return next_fresh_id_++; }
 
-RandomGenerator* FuzzerContext::GetRandomGenerator() {
-  return random_generator_;
+bool FuzzerContext::ChooseEven() { return random_generator_->RandomBool(); }
+
+bool FuzzerContext::ChoosePercentage(uint32_t percentage_chance) {
+  assert(percentage_chance <= 100);
+  return random_generator_->RandomPercentage() < percentage_chance;
 }
 
 }  // namespace fuzz

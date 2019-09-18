@@ -131,7 +131,6 @@ SPVTOOLS_OPT_SRC_FILES := \
 		source/opt/local_redundancy_elimination.cpp \
 		source/opt/local_single_block_elim_pass.cpp \
 		source/opt/local_single_store_elim_pass.cpp \
-		source/opt/local_ssa_elim_pass.cpp \
 		source/opt/loop_dependence.cpp \
 		source/opt/loop_dependence_helpers.cpp \
 		source/opt/loop_descriptor.cpp \
@@ -251,6 +250,8 @@ $(LOCAL_PATH)/source/ext_inst.cpp: \
 	$(1)/spv-amd-shader-ballot.insts.inc \
 	$(1)/spv-amd-shader-explicit-vertex-parameter.insts.inc \
 	$(1)/spv-amd-shader-trinary-minmax.insts.inc
+$(LOCAL_PATH)/source/opt/amd_ext_to_khr.cpp: \
+	$(1)/spv-amd-shader-ballot.insts.inc
 endef
 $(eval $(call gen_spvtools_grammar_tables,$(SPVTOOLS_OUT_PATH)))
 

@@ -21,12 +21,12 @@
 #include <utility>
 #include <vector>
 
-#include <source/spirv_optimizer_options.h>
 #include "source/opt/build_module.h"
 #include "source/opt/graphics_robust_access_pass.h"
 #include "source/opt/log.h"
 #include "source/opt/pass_manager.h"
 #include "source/opt/passes.h"
+#include "source/spirv_optimizer_options.h"
 #include "source/util/make_unique.h"
 #include "source/util/string_utils.h"
 
@@ -565,8 +565,11 @@ bool Optimizer::Run(const uint32_t* original_binary,
 
 #ifndef NDEBUG
   if (status == opt::Pass::Status::SuccessWithoutChange) {
-    auto changed = optimized_binary->size() != original_binary_size ||
-                   memcmp(optimized_binary->data(), original_binary,
+    std::vector<uint32_t> optimized_binary_with_nop;
+    context->module()->ToBinary(&optimized_binary_with_nop,
+                                /* skip_nop = */ false);
+    auto changed = optimized_binary_with_nop.size() != original_binary_size ||
+                   memcmp(optimized_binary_with_nop.data(), original_binary,
                           original_binary_size) != 0;
     assert(!changed &&
            "Binary unexpectedly changed despite optimizer saying there was no "

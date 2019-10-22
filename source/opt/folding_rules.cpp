@@ -1274,6 +1274,12 @@ FoldingRule CompositeConstructFeedingExtract() {
            "Wrong opcode.  Should be OpCompositeExtract.");
     analysis::DefUseManager* def_use_mgr = context->get_def_use_mgr();
     analysis::TypeManager* type_mgr = context->get_type_mgr();
+
+    // If there are no index operands, then this rule cannot do anything.
+    if (inst->NumInOperands() <= 1) {
+      return false;
+    }
+
     uint32_t cid = inst->GetSingleWordInOperand(kExtractCompositeIdInIdx);
     Instruction* cinst = def_use_mgr->GetDef(cid);
 

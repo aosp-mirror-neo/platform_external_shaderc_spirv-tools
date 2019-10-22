@@ -47,6 +47,12 @@ void FuzzerPassApplyIdSynonyms::Apply() {
             return;
           }
 
+          // |use_index| is the absolute index of the operand.  We require
+          // the index of the operand restricted to input operands only, so
+          // we subtract the number of non-input operands from |use_index|.
+          uint32_t use_in_operand_index =
+              use_index - use_inst->NumOperands() + use_inst->NumInOperands();
+
           std::vector<const protobufs::DataDescriptor*> synonyms_to_try;
           for (auto& data_descriptor :
                GetFactManager()->GetSynonymsForId(id_with_known_synonyms)) {
@@ -57,26 +63,32 @@ void FuzzerPassApplyIdSynonyms::Apply() {
                 GetFuzzerContext()->RandomIndex(synonyms_to_try);
             auto synonym_to_try = synonyms_to_try[synonym_index];
             synonyms_to_try.erase(synonyms_to_try.begin() + synonym_index);
-            assert(synonym_to_try->index().empty() &&
-                   "Right now we only support id == id synonyms; supporting "
-                   "e.g. id == index-into-vector will come later");
 
             if (!TransformationReplaceIdWithSynonym::
                     ReplacingUseWithSynonymIsOk(GetIRContext(), use_inst,
-                                                use_index, *synonym_to_try)) {
+                                                use_in_operand_index,
+                                                *synonym_to_try)) {
               continue;
             }
 
-            // |use_index| is the absolute index of the operand.  We require
-            // the index of the operand restricted to input operands only, so
-            // we subtract the number of non-input operands from |use_index|.
-            uint32_t number_of_non_input_operands =
-                use_inst->NumOperands() - use_inst->NumInOperands();
+            // At present, we generate direct id synonyms (through
+            // OpCopyObject), which require no indices, and id synonyms that
+            // require a single index (through OpCompositeConstruct).
+            assert(synonym_to_try->index_size() <= 1);
+
+            // If an index is required, then we need to extract an element
+            // from a composite (e.g. through OpCompositeExtract), and this
+            // requires a fresh result id.
+            auto fresh_id_for_temporary =
+                synonym_to_try->index().empty()
+                    ? 0
+                    : GetFuzzerContext()->GetFreshId();
+
             TransformationReplaceIdWithSynonym replace_id_transformation(
-                transformation::MakeIdUseDescriptorFromUse(
-                    GetIRContext(), use_inst,
-                    use_index - number_of_non_input_operands),
-                *synonym_to_try, 0);
+                MakeIdUseDescriptorFromUse(GetIRContext(), use_inst,
+                                           use_in_operand_index),
+                *synonym_to_try, fresh_id_for_temporary);
+
             // The transformation should be applicable by construction.
             assert(replace_id_transformation.IsApplicable(GetIRContext(),
                                                           *GetFactManager()));

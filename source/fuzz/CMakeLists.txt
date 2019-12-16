@@ -30,6 +30,7 @@ if(SPIRV_BUILD_FUZZER)
 
   set(SPIRV_TOOLS_FUZZ_SOURCES
         data_descriptor.h
+        equivalence_relation.h
         fact_manager.h
         force_render_red.h
         fuzzer.h
@@ -47,6 +48,7 @@ if(SPIRV_BUILD_FUZZER)
         fuzzer_pass_construct_composites.h
         fuzzer_pass_copy_objects.h
         fuzzer_pass_obfuscate_constants.h
+        fuzzer_pass_outline_functions.h
         fuzzer_pass_permute_blocks.h
         fuzzer_pass_split_blocks.h
         fuzzer_util.h
@@ -67,9 +69,11 @@ if(SPIRV_BUILD_FUZZER)
         transformation_add_type_float.h
         transformation_add_type_int.h
         transformation_add_type_pointer.h
-        transformation_construct_composite.h
+        transformation_composite_construct.h
+        transformation_composite_extract.h
         transformation_copy_object.h
         transformation_move_block_down.h
+        transformation_outline_function.h
         transformation_replace_boolean_constant_with_constant_binary.h
         transformation_replace_constant_with_uniform.h
         transformation_replace_id_with_synonym.h
@@ -78,6 +82,7 @@ if(SPIRV_BUILD_FUZZER)
         transformation_set_memory_operands_mask.h
         transformation_set_selection_control.h
         transformation_split_block.h
+        transformation_vector_shuffle.h
         uniform_buffer_element_descriptor.h
         ${CMAKE_CURRENT_BINARY_DIR}/protobufs/spvtoolsfuzz.pb.h
 
@@ -99,6 +104,7 @@ if(SPIRV_BUILD_FUZZER)
         fuzzer_pass_construct_composites.cpp
         fuzzer_pass_copy_objects.cpp
         fuzzer_pass_obfuscate_constants.cpp
+        fuzzer_pass_outline_functions.cpp
         fuzzer_pass_permute_blocks.cpp
         fuzzer_pass_split_blocks.cpp
         fuzzer_util.cpp
@@ -118,9 +124,11 @@ if(SPIRV_BUILD_FUZZER)
         transformation_add_type_float.cpp
         transformation_add_type_int.cpp
         transformation_add_type_pointer.cpp
-        transformation_construct_composite.cpp
+        transformation_composite_construct.cpp
+        transformation_composite_extract.cpp
         transformation_copy_object.cpp
         transformation_move_block_down.cpp
+        transformation_outline_function.cpp
         transformation_replace_boolean_constant_with_constant_binary.cpp
         transformation_replace_constant_with_uniform.cpp
         transformation_replace_id_with_synonym.cpp
@@ -129,6 +137,7 @@ if(SPIRV_BUILD_FUZZER)
         transformation_set_memory_operands_mask.cpp
         transformation_set_selection_control.cpp
         transformation_split_block.cpp
+        transformation_vector_shuffle.cpp
         uniform_buffer_element_descriptor.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/protobufs/spvtoolsfuzz.pb.cc
         )

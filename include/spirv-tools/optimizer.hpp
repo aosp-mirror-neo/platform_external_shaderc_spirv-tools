@@ -685,9 +685,9 @@ Optimizer::PassToken CreateSSARewritePass();
 // any resulting half precision values back to float32 as needed. No variables
 // are changed. No image operations are changed.
 //
-// Best if run late since it will generate better code with unneeded function
-// scope loads and stores and composite inserts and extracts removed. Also best
-// if followed by instruction simplification, redundancy elimination and DCE.
+// Best if run after function scope store/load and composite operation
+// eliminations are run. Also best if followed by instruction simplification,
+// redundancy elimination and DCE.
 Optimizer::PassToken CreateConvertRelaxedToHalfPass();
 
 // Create relax float ops pass.
@@ -748,7 +748,7 @@ Optimizer::PassToken CreateCombineAccessChainsPass();
 // |version| specifies the buffer record format.
 Optimizer::PassToken CreateInstBindlessCheckPass(
     uint32_t desc_set, uint32_t shader_id, bool input_length_enable = false,
-    bool input_init_enable = false, uint32_t version = 1);
+    bool input_init_enable = false, uint32_t version = 2);
 
 // Create a pass to instrument physical buffer address checking
 // This pass instruments all physical buffer address references to check that

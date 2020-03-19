@@ -195,14 +195,15 @@ TEST(FuzzerPassDonateModulesTest, BasicDonation) {
 
   FactManager fact_manager;
 
-  FuzzerContext fuzzer_context(MakeUnique<PseudoRandomGenerator>(0).get(), 100);
+  auto prng = MakeUnique<PseudoRandomGenerator>(0);
+  FuzzerContext fuzzer_context(prng.get(), 100);
   protobufs::TransformationSequence transformation_sequence;
 
   FuzzerPassDonateModules fuzzer_pass(recipient_context.get(), &fact_manager,
                                       &fuzzer_context, &transformation_sequence,
                                       {});
 
-  fuzzer_pass.DonateSingleModule(donor_context.get());
+  fuzzer_pass.DonateSingleModule(donor_context.get(), false);
 
   // We just check that the result is valid.  Checking to what it should be
   // exactly equal to would be very fragile.
@@ -276,7 +277,7 @@ TEST(FuzzerPassDonateModulesTest, DonationWithUniforms) {
                                       &fuzzer_context, &transformation_sequence,
                                       {});
 
-  fuzzer_pass.DonateSingleModule(donor_context.get());
+  fuzzer_pass.DonateSingleModule(donor_context.get(), false);
 
   ASSERT_TRUE(IsValid(env, recipient_context.get()));
 
@@ -313,14 +314,17 @@ TEST(FuzzerPassDonateModulesTest, DonationWithUniforms) {
         %100 = OpTypePointer Function %6
         %101 = OpTypeStruct %6
         %102 = OpTypePointer Private %101
-        %103 = OpVariable %102 Private
-        %104 = OpConstant %12 0
-        %105 = OpTypePointer Private %6
-        %106 = OpTypePointer Function %12
-        %107 = OpTypeStruct %12
-        %108 = OpTypePointer Private %107
-        %109 = OpVariable %108 Private
-        %110 = OpTypePointer Private %12
+        %104 = OpConstant %6 0
+        %105 = OpConstantComposite %101 %104
+        %103 = OpVariable %102 Private %105
+        %106 = OpConstant %12 0
+        %107 = OpTypePointer Private %6
+        %108 = OpTypePointer Function %12
+        %109 = OpTypeStruct %12
+        %110 = OpTypePointer Private %109
+        %112 = OpConstantComposite %109 %13
+        %111 = OpVariable %110 Private %112
+        %113 = OpTypePointer Private %12
           %4 = OpFunction %2 None %3
           %5 = OpLabel
           %8 = OpVariable %7 Function
@@ -333,16 +337,16 @@ TEST(FuzzerPassDonateModulesTest, DonationWithUniforms) {
                OpStore %18 %24
                OpReturn
                OpFunctionEnd
-        %111 = OpFunction %2 None %3
-        %112 = OpLabel
-        %113 = OpVariable %100 Function
-        %114 = OpVariable %106 Function
-        %115 = OpAccessChain %105 %103 %104
-        %116 = OpLoad %6 %115
-               OpStore %113 %116
-        %117 = OpAccessChain %110 %109 %104
-        %118 = OpLoad %12 %117
-               OpStore %114 %118
+        %114 = OpFunction %2 None %3
+        %115 = OpLabel
+        %116 = OpVariable %100 Function %104
+        %117 = OpVariable %108 Function %13
+        %118 = OpAccessChain %107 %103 %106
+        %119 = OpLoad %6 %118
+               OpStore %116 %119
+        %120 = OpAccessChain %113 %111 %106
+        %121 = OpLoad %12 %120
+               OpStore %117 %121
                OpReturn
                OpFunctionEnd
   )";
@@ -397,7 +401,7 @@ TEST(FuzzerPassDonateModulesTest, DonationWithInputAndOutputVariables) {
                                       &fuzzer_context, &transformation_sequence,
                                       {});
 
-  fuzzer_pass.DonateSingleModule(donor_context.get());
+  fuzzer_pass.DonateSingleModule(donor_context.get(), false);
 
   ASSERT_TRUE(IsValid(env, recipient_context.get()));
 
@@ -419,23 +423,77 @@ TEST(FuzzerPassDonateModulesTest, DonationWithInputAndOutputVariables) {
          %10 = OpTypePointer Input %7
          %11 = OpVariable %10 Input
         %100 = OpTypePointer Private %7
-        %101 = OpVariable %100 Private
-        %102 = OpTypePointer Private %7
-        %103 = OpVariable %102 Private
+        %102 = OpConstant %6 0
+        %103 = OpConstantComposite %7 %102 %102 %102 %102
+        %101 = OpVariable %100 Private %103
+        %104 = OpTypePointer Private %7
+        %105 = OpVariable %104 Private %103
           %4 = OpFunction %2 None %3
           %5 = OpLabel
          %12 = OpLoad %7 %11
                OpStore %9 %12
                OpReturn
                OpFunctionEnd
-        %104 = OpFunction %2 None %3
-        %105 = OpLabel
-        %106 = OpLoad %7 %103
-               OpStore %101 %106
+        %106 = OpFunction %2 None %3
+        %107 = OpLabel
+        %108 = OpLoad %7 %105
+               OpStore %101 %108
                OpReturn
                OpFunctionEnd
   )";
   ASSERT_TRUE(IsEqual(env, after_transformation, recipient_context.get()));
+}
+
+TEST(FuzzerPassDonateModulesTest, DonateFunctionTypeWithDifferentPointers) {
+  std::string recipient_and_donor_shader = R"(
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource ESSL 310
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeInt 32 0
+          %7 = OpTypePointer Function %6
+          %8 = OpTypeFunction %2 %7
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+          %9 = OpVariable %7 Function
+         %10 = OpFunctionCall %2 %11 %9
+               OpReturn
+               OpFunctionEnd
+         %11 = OpFunction %2 None %8
+         %12 = OpFunctionParameter %7
+         %13 = OpLabel
+               OpReturn
+               OpFunctionEnd
+  )";
+
+  const auto env = SPV_ENV_UNIVERSAL_1_5;
+  const auto consumer = nullptr;
+  const auto recipient_context = BuildModule(
+      env, consumer, recipient_and_donor_shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, recipient_context.get()));
+
+  const auto donor_context = BuildModule(
+      env, consumer, recipient_and_donor_shader, kFuzzAssembleOption);
+  ASSERT_TRUE(IsValid(env, donor_context.get()));
+
+  FactManager fact_manager;
+
+  FuzzerContext fuzzer_context(MakeUnique<PseudoRandomGenerator>(0).get(), 100);
+  protobufs::TransformationSequence transformation_sequence;
+
+  FuzzerPassDonateModules fuzzer_pass(recipient_context.get(), &fact_manager,
+                                      &fuzzer_context, &transformation_sequence,
+                                      {});
+
+  fuzzer_pass.DonateSingleModule(donor_context.get(), false);
+
+  // We just check that the result is valid.  Checking to what it should be
+  // exactly equal to would be very fragile.
+  ASSERT_TRUE(IsValid(env, recipient_context.get()));
 }
 
 TEST(FuzzerPassDonateModulesTest, Miscellaneous1) {
@@ -608,7 +666,7 @@ TEST(FuzzerPassDonateModulesTest, Miscellaneous1) {
                                       &fuzzer_context, &transformation_sequence,
                                       {});
 
-  fuzzer_pass.DonateSingleModule(donor_context.get());
+  fuzzer_pass.DonateSingleModule(donor_context.get(), false);
 
   // We just check that the result is valid.  Checking to what it should be
   // exactly equal to would be very fragile.

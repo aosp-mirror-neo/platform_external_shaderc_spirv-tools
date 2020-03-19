@@ -254,11 +254,21 @@ bool TransformationOutlineFunction::IsApplicable(
     if (input_id_to_fresh_id_map.count(id) == 0) {
       return false;
     }
-    // Furthermore, no region input id is allowed to be the result of an access
-    // chain.  This is because region input ids will become function parameters,
-    // and it is not legal to pass an access chain as a function parameter.
-    if (context->get_def_use_mgr()->GetDef(id)->opcode() == SpvOpAccessChain) {
-      return false;
+    // Furthermore, if the input id has pointer type it must be an OpVariable
+    // or OpFunctionParameter.
+    auto input_id_inst = context->get_def_use_mgr()->GetDef(id);
+    if (context->get_def_use_mgr()
+            ->GetDef(input_id_inst->type_id())
+            ->opcode() == SpvOpTypePointer) {
+      switch (input_id_inst->opcode()) {
+        case SpvOpFunctionParameter:
+        case SpvOpVariable:
+          // These are OK.
+          break;
+        default:
+          // Anything else is not OK.
+          return false;
+      }
     }
   }
 
@@ -330,8 +340,16 @@ void TransformationOutlineFunction::Apply(
 
   // Make a function prototype for the outlined function, which involves
   // figuring out its required type.
-  std::unique_ptr<opt::Function> outlined_function = PrepareFunctionPrototype(
-      context, region_input_ids, region_output_ids, input_id_to_fresh_id_map);
+  std::unique_ptr<opt::Function> outlined_function =
+      PrepareFunctionPrototype(region_input_ids, region_output_ids,
+                               input_id_to_fresh_id_map, context, fact_manager);
+
+  // If the original function was livesafe, the new function should also be
+  // livesafe.
+  if (fact_manager->FunctionIsLivesafe(
+          original_region_entry_block->GetParent()->result_id())) {
+    fact_manager->AddFactFunctionIsLivesafe(message_.new_function_id());
+  }
 
   // Adapt the region to be outlined so that its input ids are replaced with the
   // ids of the outlined function's input parameters, and so that output ids
@@ -366,20 +384,6 @@ protobufs::Transformation TransformationOutlineFunction::ToMessage() const {
   protobufs::Transformation result;
   *result.mutable_outline_function() = message_;
   return result;
-}
-
-bool TransformationOutlineFunction::
-    CheckIdIsFreshAndNotUsedByThisTransformation(
-        uint32_t id, opt::IRContext* context,
-        std::set<uint32_t>* ids_used_by_this_transformation) const {
-  if (!fuzzerutil::IsFreshId(context, id)) {
-    return false;
-  }
-  if (ids_used_by_this_transformation->count(id) != 0) {
-    return false;
-  }
-  ids_used_by_this_transformation->insert(id);
-  return true;
 }
 
 std::vector<uint32_t> TransformationOutlineFunction::GetRegionInputIds(
@@ -528,9 +532,10 @@ std::set<opt::BasicBlock*> TransformationOutlineFunction::GetRegionBlocks(
 
 std::unique_ptr<opt::Function>
 TransformationOutlineFunction::PrepareFunctionPrototype(
-    opt::IRContext* context, const std::vector<uint32_t>& region_input_ids,
+    const std::vector<uint32_t>& region_input_ids,
     const std::vector<uint32_t>& region_output_ids,
-    const std::map<uint32_t, uint32_t>& input_id_to_fresh_id_map) const {
+    const std::map<uint32_t, uint32_t>& input_id_to_fresh_id_map,
+    opt::IRContext* context, FactManager* fact_manager) const {
   uint32_t return_type_id = 0;
   uint32_t function_type_id = 0;
 
@@ -540,15 +545,16 @@ TransformationOutlineFunction::PrepareFunctionPrototype(
   // not exist there cannot already be a function type with this struct as its
   // return type.
   if (region_output_ids.empty()) {
+    std::vector<uint32_t> return_and_parameter_types;
     opt::analysis::Void void_type;
     return_type_id = context->get_type_mgr()->GetId(&void_type);
-    std::vector<const opt::analysis::Type*> argument_types;
+    return_and_parameter_types.push_back(return_type_id);
     for (auto id : region_input_ids) {
-      argument_types.push_back(context->get_type_mgr()->GetType(
-          context->get_def_use_mgr()->GetDef(id)->type_id()));
+      return_and_parameter_types.push_back(
+          context->get_def_use_mgr()->GetDef(id)->type_id());
     }
-    opt::analysis::Function function_type(&void_type, argument_types);
-    function_type_id = context->get_type_mgr()->GetId(&function_type);
+    function_type_id =
+        fuzzerutil::FindFunctionType(context, return_and_parameter_types);
   }
 
   // If no existing function type was found, we need to create one.
@@ -611,6 +617,12 @@ TransformationOutlineFunction::PrepareFunctionPrototype(
         context, SpvOpFunctionParameter,
         context->get_def_use_mgr()->GetDef(id)->type_id(),
         input_id_to_fresh_id_map.at(id), opt::Instruction::OperandList()));
+    // If the input id is an irrelevant-valued variable, the same should be true
+    // of the corresponding parameter.
+    if (fact_manager->PointeeValueIsIrrelevant(id)) {
+      fact_manager->AddFactValueOfPointeeIsIrrelevant(
+          input_id_to_fresh_id_map.at(id));
+    }
   }
 
   return outlined_function;

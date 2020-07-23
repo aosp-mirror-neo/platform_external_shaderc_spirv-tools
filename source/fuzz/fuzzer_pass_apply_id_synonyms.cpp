@@ -19,32 +19,45 @@
 #include "source/fuzz/id_use_descriptor.h"
 #include "source/fuzz/instruction_descriptor.h"
 #include "source/fuzz/transformation_composite_extract.h"
+#include "source/fuzz/transformation_compute_data_synonym_fact_closure.h"
 #include "source/fuzz/transformation_replace_id_with_synonym.h"
 
 namespace spvtools {
 namespace fuzz {
 
 FuzzerPassApplyIdSynonyms::FuzzerPassApplyIdSynonyms(
-    opt::IRContext* ir_context, FactManager* fact_manager,
+    opt::IRContext* ir_context, TransformationContext* transformation_context,
     FuzzerContext* fuzzer_context,
     protobufs::TransformationSequence* transformations)
-    : FuzzerPass(ir_context, fact_manager, fuzzer_context, transformations) {}
+    : FuzzerPass(ir_context, transformation_context, fuzzer_context,
+                 transformations) {}
 
 FuzzerPassApplyIdSynonyms::~FuzzerPassApplyIdSynonyms() = default;
 
 void FuzzerPassApplyIdSynonyms::Apply() {
-  for (auto id_with_known_synonyms :
-       GetFactManager()->GetIdsForWhichSynonymsAreKnown(GetIRContext())) {
-    // Gather up all uses of |id_with_known_synonym|, and then subsequently
-    // iterate over these uses.  We use this separation because, when
-    // considering a given use, we might apply a transformation that will
+  // Compute a closure of data synonym facts, to enrich the pool of synonyms
+  // that are available.
+  ApplyTransformation(TransformationComputeDataSynonymFactClosure(
+      GetFuzzerContext()
+          ->GetMaximumEquivalenceClassSizeForDataSynonymFactClosure()));
+
+  for (auto id_with_known_synonyms : GetTransformationContext()
+                                         ->GetFactManager()
+                                         ->GetIdsForWhichSynonymsAreKnown()) {
+    // Gather up all uses of |id_with_known_synonym| as a regular id, and
+    // subsequently iterate over these uses.  We use this separation because,
+    // when considering a given use, we might apply a transformation that will
     // invalidate the def-use manager.
     std::vector<std::pair<opt::Instruction*, uint32_t>> uses;
     GetIRContext()->get_def_use_mgr()->ForEachUse(
         id_with_known_synonyms,
         [&uses](opt::Instruction* use_inst, uint32_t use_index) -> void {
-          uses.emplace_back(
-              std::pair<opt::Instruction*, uint32_t>(use_inst, use_index));
+          // We only gather up regular id uses; e.g. we do not include a use of
+          // the id as the scope for an atomic operation.
+          if (use_inst->GetOperand(use_index).type == SPV_OPERAND_TYPE_ID) {
+            uses.emplace_back(
+                std::pair<opt::Instruction*, uint32_t>(use_inst, use_index));
+          }
         });
 
     for (auto& use : uses) {
@@ -60,18 +73,18 @@ void FuzzerPassApplyIdSynonyms::Apply() {
         continue;
       }
       // |use_index| is the absolute index of the operand.  We require
-      // the index of the operand restricted to input operands only, so
-      // we subtract the number of non-input operands from |use_index|.
+      // the index of the operand restricted to input operands only.
       uint32_t use_in_operand_index =
-          use_index - use_inst->NumOperands() + use_inst->NumInOperands();
+          fuzzerutil::InOperandIndexFromOperandIndex(*use_inst, use_index);
       if (!TransformationReplaceIdWithSynonym::UseCanBeReplacedWithSynonym(
               GetIRContext(), use_inst, use_in_operand_index)) {
         continue;
       }
 
       std::vector<const protobufs::DataDescriptor*> synonyms_to_try;
-      for (auto& data_descriptor : GetFactManager()->GetSynonymsForId(
-               id_with_known_synonyms, GetIRContext())) {
+      for (auto& data_descriptor :
+           GetTransformationContext()->GetFactManager()->GetSynonymsForId(
+               id_with_known_synonyms)) {
         protobufs::DataDescriptor descriptor_for_this_id =
             MakeDataDescriptor(id_with_known_synonyms, {});
         if (DataDescriptorEquals()(data_descriptor, &descriptor_for_this_id)) {
@@ -129,6 +142,9 @@ void FuzzerPassApplyIdSynonyms::Apply() {
                                                : parent_block->terminator();
           }
 
+          assert(!GetTransformationContext()->GetFactManager()->IdIsIrrelevant(
+                     synonym_to_try->object()) &&
+                 "Irrelevant ids can't participate in DataSynonym facts");
           ApplyTransformation(TransformationCompositeExtract(
               MakeInstructionDescriptor(GetIRContext(),
                                         instruction_to_insert_before),

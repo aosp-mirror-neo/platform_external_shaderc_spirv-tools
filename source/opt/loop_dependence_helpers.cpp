@@ -54,20 +54,20 @@ SENode* LoopDependenceAnalysis::GetLowerBound(const Loop* loop) {
   }
   Instruction* lower_inst = GetOperandDefinition(cond_inst, 0);
   switch (cond_inst->opcode()) {
-    case spv::Op::OpULessThan:
-    case spv::Op::OpSLessThan:
-    case spv::Op::OpULessThanEqual:
-    case spv::Op::OpSLessThanEqual:
-    case spv::Op::OpUGreaterThan:
-    case spv::Op::OpSGreaterThan:
-    case spv::Op::OpUGreaterThanEqual:
-    case spv::Op::OpSGreaterThanEqual: {
+    case SpvOpULessThan:
+    case SpvOpSLessThan:
+    case SpvOpULessThanEqual:
+    case SpvOpSLessThanEqual:
+    case SpvOpUGreaterThan:
+    case SpvOpSGreaterThan:
+    case SpvOpUGreaterThanEqual:
+    case SpvOpSGreaterThanEqual: {
       // If we have a phi we are looking at the induction variable. We look
       // through the phi to the initial value of the phi upon entering the loop.
-      if (lower_inst->opcode() == spv::Op::OpPhi) {
+      if (lower_inst->opcode() == SpvOpPhi) {
         lower_inst = GetOperandDefinition(lower_inst, 0);
         // We don't handle looking through multiple phis.
-        if (lower_inst->opcode() == spv::Op::OpPhi) {
+        if (lower_inst->opcode() == SpvOpPhi) {
           return nullptr;
         }
       }
@@ -86,8 +86,8 @@ SENode* LoopDependenceAnalysis::GetUpperBound(const Loop* loop) {
   }
   Instruction* upper_inst = GetOperandDefinition(cond_inst, 1);
   switch (cond_inst->opcode()) {
-    case spv::Op::OpULessThan:
-    case spv::Op::OpSLessThan: {
+    case SpvOpULessThan:
+    case SpvOpSLessThan: {
       // When we have a < condition we must subtract 1 from the analyzed upper
       // instruction.
       SENode* upper_bound = scalar_evolution_.SimplifyExpression(
@@ -96,8 +96,8 @@ SENode* LoopDependenceAnalysis::GetUpperBound(const Loop* loop) {
               scalar_evolution_.CreateConstant(1)));
       return upper_bound;
     }
-    case spv::Op::OpUGreaterThan:
-    case spv::Op::OpSGreaterThan: {
+    case SpvOpUGreaterThan:
+    case SpvOpSGreaterThan: {
       // When we have a > condition we must add 1 to the analyzed upper
       // instruction.
       SENode* upper_bound =
@@ -106,10 +106,10 @@ SENode* LoopDependenceAnalysis::GetUpperBound(const Loop* loop) {
               scalar_evolution_.CreateConstant(1)));
       return upper_bound;
     }
-    case spv::Op::OpULessThanEqual:
-    case spv::Op::OpSLessThanEqual:
-    case spv::Op::OpUGreaterThanEqual:
-    case spv::Op::OpSGreaterThanEqual: {
+    case SpvOpULessThanEqual:
+    case SpvOpSLessThanEqual:
+    case SpvOpUGreaterThanEqual:
+    case SpvOpSGreaterThanEqual: {
       // We don't need to modify the results of analyzing when we have <= or >=.
       SENode* upper_bound = scalar_evolution_.SimplifyExpression(
           scalar_evolution_.AnalyzeInstruction(upper_inst));

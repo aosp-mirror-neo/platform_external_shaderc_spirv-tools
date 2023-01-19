@@ -29,21 +29,6 @@
 
 namespace spvtools {
 namespace opt {
-namespace {
-// Gather the set of blocks for all the path from |entry| to |root|.
-void GetBlocksInPath(uint32_t block, uint32_t entry,
-                     std::unordered_set<uint32_t>* blocks_in_path,
-                     const CFG& cfg) {
-  for (uint32_t pid : cfg.preds(block)) {
-    if (blocks_in_path->insert(pid).second) {
-      if (pid != entry) {
-        GetBlocksInPath(pid, entry, blocks_in_path, cfg);
-      }
-    }
-  }
-}
-}  // namespace
-
 size_t LoopPeelingPass::code_grow_threshold_ = 1000;
 
 void LoopPeeling::DuplicateAndConnectLoop(
@@ -201,7 +186,7 @@ void LoopPeeling::GetIteratorUpdateOperations(
   operations->insert(iterator);
   iterator->ForEachInId([def_use_mgr, loop, operations, this](uint32_t* id) {
     Instruction* insn = def_use_mgr->GetDef(*id);
-    if (insn->opcode() == spv::Op::OpLabel) {
+    if (insn->opcode() == SpvOpLabel) {
       return;
     }
     if (operations->count(insn)) {
@@ -212,6 +197,19 @@ void LoopPeeling::GetIteratorUpdateOperations(
     }
     GetIteratorUpdateOperations(loop, insn, operations);
   });
+}
+
+// Gather the set of blocks for all the path from |entry| to |root|.
+static void GetBlocksInPath(uint32_t block, uint32_t entry,
+                            std::unordered_set<uint32_t>* blocks_in_path,
+                            const CFG& cfg) {
+  for (uint32_t pid : cfg.preds(block)) {
+    if (blocks_in_path->insert(pid).second) {
+      if (pid != entry) {
+        GetBlocksInPath(pid, entry, blocks_in_path, cfg);
+      }
+    }
+  }
 }
 
 bool LoopPeeling::IsConditionCheckSideEffectFree() const {
@@ -233,9 +231,9 @@ bool LoopPeeling::IsConditionCheckSideEffectFree() const {
       if (!bb->WhileEachInst([this](Instruction* insn) {
             if (insn->IsBranch()) return true;
             switch (insn->opcode()) {
-              case spv::Op::OpLabel:
-              case spv::Op::OpSelectionMerge:
-              case spv::Op::OpLoopMerge:
+              case SpvOpLabel:
+              case SpvOpSelectionMerge:
+              case SpvOpLoopMerge:
                 return true;
               default:
                 break;
@@ -324,7 +322,7 @@ void LoopPeeling::FixExitCondition(
 
   BasicBlock* condition_block = cfg.block(condition_block_id);
   Instruction* exit_condition = condition_block->terminator();
-  assert(exit_condition->opcode() == spv::Op::OpBranchConditional);
+  assert(exit_condition->opcode() == SpvOpBranchConditional);
   BasicBlock::iterator insert_point = condition_block->tail();
   if (condition_block->GetMergeInst()) {
     --insert_point;
@@ -352,7 +350,7 @@ BasicBlock* LoopPeeling::CreateBlockBefore(BasicBlock* bb) {
   // TODO(1841): Handle id overflow.
   std::unique_ptr<BasicBlock> new_bb =
       MakeUnique<BasicBlock>(std::unique_ptr<Instruction>(new Instruction(
-          context_, spv::Op::OpLabel, 0, context_->TakeNextId(), {})));
+          context_, SpvOpLabel, 0, context_->TakeNextId(), {})));
   // Update the loop descriptor.
   Loop* in_loop = (*loop_utils_.GetLoopDescriptor())[bb];
   if (in_loop) {
@@ -793,18 +791,18 @@ uint32_t LoopPeelingPass::LoopPeelingInfo::GetFirstNonLoopInvariantOperand(
   return 0;
 }
 
-static bool IsHandledCondition(spv::Op opcode) {
+static bool IsHandledCondition(SpvOp opcode) {
   switch (opcode) {
-    case spv::Op::OpIEqual:
-    case spv::Op::OpINotEqual:
-    case spv::Op::OpUGreaterThan:
-    case spv::Op::OpSGreaterThan:
-    case spv::Op::OpUGreaterThanEqual:
-    case spv::Op::OpSGreaterThanEqual:
-    case spv::Op::OpULessThan:
-    case spv::Op::OpSLessThan:
-    case spv::Op::OpULessThanEqual:
-    case spv::Op::OpSLessThanEqual:
+    case SpvOpIEqual:
+    case SpvOpINotEqual:
+    case SpvOpUGreaterThan:
+    case SpvOpSGreaterThan:
+    case SpvOpUGreaterThanEqual:
+    case SpvOpSGreaterThanEqual:
+    case SpvOpULessThan:
+    case SpvOpSLessThan:
+    case SpvOpULessThanEqual:
+    case SpvOpSLessThanEqual:
       return true;
     default:
       return false;
@@ -813,7 +811,7 @@ static bool IsHandledCondition(spv::Op opcode) {
 
 LoopPeelingPass::LoopPeelingInfo::Direction
 LoopPeelingPass::LoopPeelingInfo::GetPeelingInfo(BasicBlock* bb) const {
-  if (bb->terminator()->opcode() != spv::Op::OpBranchConditional) {
+  if (bb->terminator()->opcode() != SpvOpBranchConditional) {
     return GetNoneDirection();
   }
 
@@ -888,27 +886,27 @@ LoopPeelingPass::LoopPeelingInfo::GetPeelingInfo(BasicBlock* bb) const {
   switch (condition->opcode()) {
     default:
       return GetNoneDirection();
-    case spv::Op::OpIEqual:
-    case spv::Op::OpINotEqual:
+    case SpvOpIEqual:
+    case SpvOpINotEqual:
       return HandleEquality(lhs, rhs);
-    case spv::Op::OpUGreaterThan:
-    case spv::Op::OpSGreaterThan: {
+    case SpvOpUGreaterThan:
+    case SpvOpSGreaterThan: {
       cmp_operator = CmpOperator::kGT;
       break;
     }
-    case spv::Op::OpULessThan:
-    case spv::Op::OpSLessThan: {
+    case SpvOpULessThan:
+    case SpvOpSLessThan: {
       cmp_operator = CmpOperator::kLT;
       break;
     }
     // We add one to transform >= into > and <= into <.
-    case spv::Op::OpUGreaterThanEqual:
-    case spv::Op::OpSGreaterThanEqual: {
+    case SpvOpUGreaterThanEqual:
+    case SpvOpSGreaterThanEqual: {
       cmp_operator = CmpOperator::kGE;
       break;
     }
-    case spv::Op::OpULessThanEqual:
-    case spv::Op::OpSLessThanEqual: {
+    case SpvOpULessThanEqual:
+    case SpvOpSLessThanEqual: {
       cmp_operator = CmpOperator::kLE;
       break;
     }

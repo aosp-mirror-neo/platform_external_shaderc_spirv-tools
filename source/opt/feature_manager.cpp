@@ -36,7 +36,7 @@ void FeatureManager::AddExtensions(Module* module) {
 }
 
 void FeatureManager::AddExtension(Instruction* ext) {
-  assert(ext->opcode() == spv::Op::OpExtension &&
+  assert(ext->opcode() == SpvOpExtension &&
          "Expecting an extension instruction.");
 
   const std::string name = ext->GetInOperand(0u).AsString();
@@ -51,27 +51,27 @@ void FeatureManager::RemoveExtension(Extension ext) {
   extensions_.Remove(ext);
 }
 
-void FeatureManager::AddCapability(spv::Capability cap) {
+void FeatureManager::AddCapability(SpvCapability cap) {
   if (capabilities_.Contains(cap)) return;
 
   capabilities_.Add(cap);
 
   spv_operand_desc desc = {};
-  if (SPV_SUCCESS == grammar_.lookupOperand(SPV_OPERAND_TYPE_CAPABILITY,
-                                            uint32_t(cap), &desc)) {
+  if (SPV_SUCCESS ==
+      grammar_.lookupOperand(SPV_OPERAND_TYPE_CAPABILITY, cap, &desc)) {
     CapabilitySet(desc->numCapabilities, desc->capabilities)
-        .ForEach([this](spv::Capability c) { AddCapability(c); });
+        .ForEach([this](SpvCapability c) { AddCapability(c); });
   }
 }
 
-void FeatureManager::RemoveCapability(spv::Capability cap) {
+void FeatureManager::RemoveCapability(SpvCapability cap) {
   if (!capabilities_.Contains(cap)) return;
   capabilities_.Remove(cap);
 }
 
 void FeatureManager::AddCapabilities(Module* module) {
   for (Instruction& inst : module->capabilities()) {
-    AddCapability(static_cast<spv::Capability>(inst.GetSingleWordInOperand(0)));
+    AddCapability(static_cast<SpvCapability>(inst.GetSingleWordInOperand(0)));
   }
 }
 

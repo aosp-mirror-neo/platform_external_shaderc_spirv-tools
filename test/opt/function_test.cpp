@@ -248,7 +248,7 @@ OpFunctionEnd
   std::unordered_set<uint32_t> non_semantic_ids;
   func->ForEachInst(
       [&non_semantic_ids](const Instruction* inst) {
-        if (inst->opcode() == spv::Op::OpExtInst) {
+        if (inst->opcode() == SpvOpExtInst) {
           non_semantic_ids.insert(inst->result_id());
         }
       },
@@ -285,7 +285,7 @@ OpFunctionEnd
   std::unordered_set<uint32_t> non_semantic_ids;
   func->ForEachInst(
       [&non_semantic_ids](const Instruction* inst) {
-        if (inst->opcode() == spv::Op::OpExtInst) {
+        if (inst->opcode() == SpvOpExtInst) {
           non_semantic_ids.insert(inst->result_id());
         }
       },

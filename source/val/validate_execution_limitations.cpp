@@ -22,7 +22,7 @@ namespace val {
 
 spv_result_t ValidateExecutionLimitations(ValidationState_t& _,
                                           const Instruction* inst) {
-  if (inst->opcode() != spv::Op::OpFunction) {
+  if (inst->opcode() != SpvOpFunction) {
     return SPV_SUCCESS;
   }
 

@@ -61,7 +61,6 @@ class NamedBarrier;
 class AccelerationStructureNV;
 class CooperativeMatrixNV;
 class RayQueryKHR;
-class HitObjectNV;
 
 // Abstract class for a SPIR-V type. It has a bunch of As<sublcass>() methods,
 // which is used as a way to probe the actual <subclass>.
@@ -101,7 +100,6 @@ class Type {
     kAccelerationStructureNV,
     kCooperativeMatrixNV,
     kRayQueryKHR,
-    kHitObjectNV,
     kLast
   };
 
@@ -198,7 +196,6 @@ class Type {
   DeclareCastMethod(AccelerationStructureNV)
   DeclareCastMethod(CooperativeMatrixNV)
   DeclareCastMethod(RayQueryKHR)
-  DeclareCastMethod(HitObjectNV)
 #undef DeclareCastMethod
 
 protected:
@@ -305,9 +302,9 @@ class Matrix : public Type {
 
 class Image : public Type {
  public:
-  Image(Type* type, spv::Dim dimen, uint32_t d, bool array, bool multisample,
-        uint32_t sampling, spv::ImageFormat f,
-        spv::AccessQualifier qualifier = spv::AccessQualifier::ReadOnly);
+  Image(Type* type, SpvDim dimen, uint32_t d, bool array, bool multisample,
+        uint32_t sampling, SpvImageFormat f,
+        SpvAccessQualifier qualifier = SpvAccessQualifierReadOnly);
   Image(const Image&) = default;
 
   std::string str() const override;
@@ -316,13 +313,13 @@ class Image : public Type {
   const Image* AsImage() const override { return this; }
 
   const Type* sampled_type() const { return sampled_type_; }
-  spv::Dim dim() const { return dim_; }
+  SpvDim dim() const { return dim_; }
   uint32_t depth() const { return depth_; }
   bool is_arrayed() const { return arrayed_; }
   bool is_multisampled() const { return ms_; }
   uint32_t sampled() const { return sampled_; }
-  spv::ImageFormat format() const { return format_; }
-  spv::AccessQualifier access_qualifier() const { return access_qualifier_; }
+  SpvImageFormat format() const { return format_; }
+  SpvAccessQualifier access_qualifier() const { return access_qualifier_; }
 
   size_t ComputeExtraStateHash(size_t hash, SeenTypes* seen) const override;
 
@@ -330,13 +327,13 @@ class Image : public Type {
   bool IsSameImpl(const Type* that, IsSameCache*) const override;
 
   Type* sampled_type_;
-  spv::Dim dim_;
+  SpvDim dim_;
   uint32_t depth_;
   bool arrayed_;
   bool ms_;
   uint32_t sampled_;
-  spv::ImageFormat format_;
-  spv::AccessQualifier access_qualifier_;
+  SpvImageFormat format_;
+  SpvAccessQualifier access_qualifier_;
 };
 
 class SampledImage : public Type {
@@ -494,12 +491,12 @@ class Opaque : public Type {
 
 class Pointer : public Type {
  public:
-  Pointer(const Type* pointee, spv::StorageClass sc);
+  Pointer(const Type* pointee, SpvStorageClass sc);
   Pointer(const Pointer&) = default;
 
   std::string str() const override;
   const Type* pointee_type() const { return pointee_type_; }
-  spv::StorageClass storage_class() const { return storage_class_; }
+  SpvStorageClass storage_class() const { return storage_class_; }
 
   Pointer* AsPointer() override { return this; }
   const Pointer* AsPointer() const override { return this; }
@@ -512,7 +509,7 @@ class Pointer : public Type {
   bool IsSameImpl(const Type* that, IsSameCache*) const override;
 
   const Type* pointee_type_;
-  spv::StorageClass storage_class_;
+  SpvStorageClass storage_class_;
 };
 
 class Function : public Type {
@@ -543,7 +540,7 @@ class Function : public Type {
 
 class Pipe : public Type {
  public:
-  Pipe(spv::AccessQualifier qualifier)
+  Pipe(SpvAccessQualifier qualifier)
       : Type(kPipe), access_qualifier_(qualifier) {}
   Pipe(const Pipe&) = default;
 
@@ -552,19 +549,19 @@ class Pipe : public Type {
   Pipe* AsPipe() override { return this; }
   const Pipe* AsPipe() const override { return this; }
 
-  spv::AccessQualifier access_qualifier() const { return access_qualifier_; }
+  SpvAccessQualifier access_qualifier() const { return access_qualifier_; }
 
   size_t ComputeExtraStateHash(size_t hash, SeenTypes* seen) const override;
 
  private:
   bool IsSameImpl(const Type* that, IsSameCache*) const override;
 
-  spv::AccessQualifier access_qualifier_;
+  SpvAccessQualifier access_qualifier_;
 };
 
 class ForwardPointer : public Type {
  public:
-  ForwardPointer(uint32_t id, spv::StorageClass sc)
+  ForwardPointer(uint32_t id, SpvStorageClass sc)
       : Type(kForwardPointer),
         target_id_(id),
         storage_class_(sc),
@@ -573,7 +570,7 @@ class ForwardPointer : public Type {
 
   uint32_t target_id() const { return target_id_; }
   void SetTargetPointer(const Pointer* pointer) { pointer_ = pointer; }
-  spv::StorageClass storage_class() const { return storage_class_; }
+  SpvStorageClass storage_class() const { return storage_class_; }
   const Pointer* target_pointer() const { return pointer_; }
 
   std::string str() const override;
@@ -587,7 +584,7 @@ class ForwardPointer : public Type {
   bool IsSameImpl(const Type* that, IsSameCache*) const override;
 
   uint32_t target_id_;
-  spv::StorageClass storage_class_;
+  SpvStorageClass storage_class_;
   const Pointer* pointer_;
 };
 
@@ -651,7 +648,6 @@ DefineParameterlessType(PipeStorage, pipe_storage);
 DefineParameterlessType(NamedBarrier, named_barrier);
 DefineParameterlessType(AccelerationStructureNV, accelerationStructureNV);
 DefineParameterlessType(RayQueryKHR, rayQueryKHR);
-DefineParameterlessType(HitObjectNV, hitObjectNV);
 #undef DefineParameterlessType
 
 }  // namespace analysis
